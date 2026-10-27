@@ -15,7 +15,7 @@ script = ExtResource("1_player")
 shape = SubResource("CircleShape2D_player")
 
 [node name="AmbientLight" type="PointLight2D" parent="."]
-energy = 0.9
+energy = 0.3
 texture_scale = 1.0
 shadow_enabled = true
 
