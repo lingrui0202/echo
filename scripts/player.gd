@@ -6,10 +6,11 @@ const LightFactory = preload("res://scripts/light_factory.gd")
 const SPEED := 235.0
 const SONAR_COOLDOWN := 1.2     # ← 报告里的核心实验变量
 
-# 常亮光圈：只让你知道"自己站在哪"，看不见下一个格子。
-# 第 5 周试玩反馈"还是能看清路、和普通迷宫没区别"，所以从 128px/0.9 收到 40px/0.30。
-const AMBIENT_RADIUS := 40
-const AMBIENT_ENERGY := 0.30
+# 常亮光圈：只要"看得见边界的一小圈"，看不见下一个格子。
+# 第 5 周试玩反馈：太亮 → 压到 0.015 的 CanvasModulate；随后要求"周围一圈要可见"，
+# 所以光圈改成环状贴图（中心留暗、半径处最亮），仍然很小。
+const AMBIENT_RADIUS := 56
+const AMBIENT_ENERGY := 0.75
 
 @onready var sonar := $Sonar
 @onready var ambient: PointLight2D = $AmbientLight
@@ -18,10 +19,10 @@ var _cd := 0.0
 var _alive := true
 
 func _ready() -> void:
-	ambient.texture = LightFactory.radial_texture(AMBIENT_RADIUS)
+	ambient.texture = LightFactory.ring_texture(AMBIENT_RADIUS * 2, 0.45, 0.82)
 	ambient.energy = AMBIENT_ENERGY
 	ambient.texture_scale = 1.0
-	sonar.setup(LightFactory.radial_texture(256))
+	sonar.setup(LightFactory.radial_texture(256), LightFactory.ring_texture(256))
 	GameLog.start_session()
 	queue_redraw()
 
