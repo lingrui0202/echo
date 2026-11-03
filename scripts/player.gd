@@ -4,7 +4,7 @@ extends CharacterBody2D
 const LightFactory = preload("res://scripts/light_factory.gd")
 
 const SPEED := 235.0
-const SONAR_COOLDOWN := 1.2     # ← 报告里的核心实验变量
+const SONAR_COOLDOWN := 1.8     # ← 报告里的核心实验变量
 
 # 常亮光圈：只要"看得见边界的一小圈"，看不见下一个格子。
 # 第 5 周试玩反馈：太亮 → 压到 0.015 的 CanvasModulate；随后要求"周围一圈要可见"，
@@ -41,6 +41,9 @@ func _physics_process(delta: float) -> void:
 	if Input.is_action_just_pressed("sonar") and _cd <= 0.0:
 		_cd = SONAR_COOLDOWN
 		sonar.emit()
+		var level := get_parent()
+		if level != null and level.has_method("emit_wave"):
+			level.emit_wave(global_position)
 		GameLog.note_sonar()
 
 	GameLog.note_position(global_position)

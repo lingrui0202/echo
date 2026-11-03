@@ -16,8 +16,8 @@ extends PointLight2D
 const DURATION := 1.05
 const MAX_SCALE := 6.5
 const MIN_SCALE := 0.3
-const FILL_PEAK := 0.55
-const RING_PEAK := 3.2
+const FILL_PEAK := 0.12      # 只留一点点余辉，别抢波的戏
+const RING_PEAK := 0.0       # 圆形扩展光环：关掉，改用 scripts/sonar_wave.gd
 
 var _t := -1.0
 var _radius_px := 128.0
@@ -65,9 +65,5 @@ func _process(delta: float) -> void:
 			_wave.energy = 0.0
 
 func _draw() -> void:
-	if _t < 0.0:
-		return
-	var k := clampf(_t / DURATION, 0.0, 1.0)
-	var r := _radius_px * texture_scale
-	var a := (1.0 - k) * 0.9
-	draw_arc(Vector2.ZERO, r, 0.0, TAU, 128, Color(0.55, 0.88, 1.0, a), 3.0, true)
+	# 圆形波纹已经交给 sonar_wave.gd 的波场去画了，这里不再画圈
+	pass

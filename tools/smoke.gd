@@ -13,9 +13,12 @@ extends SceneTree
 
 const CELL := 64
 const SPEED := 235.0
-const COOLDOWN_MS := 1200
-const WALL_X := 4.0            # level.gd 第 2 行 "....##" 的墙左边缘
-const WALL_ROW_Y := 2.5        # 第 2 行格子中心
+const COOLDOWN_MS := 1800
+# 新地图（61x34，2 格宽通道）里最长的一条横走廊：第 2 行，第 16..53 列是空地，54 列是墙
+const LANE_ROW := 2
+const LANE_COL := 17
+const WALL_X := 54.0           # 该行墙的左边缘（第 54 列）
+const WALL_ROW_Y := 2.5
 
 var _t0 := 0
 var _done: Array[String] = []
@@ -58,6 +61,8 @@ func _process(_delta: float) -> bool:
 		if _player == null:
 			print("FAIL: 找不到 Player，关卡没建起来")
 			return true
+		# 挪到第 2 行那条长走廊，右边连着三十多格空地
+		_player.global_position = Vector2((LANE_COL + 0.5) * CELL, (LANE_ROW + 0.5) * CELL)
 		_start_x = _player.global_position.x
 		_move_from = _ms()
 

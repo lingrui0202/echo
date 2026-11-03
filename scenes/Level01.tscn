@@ -1,19 +1,19 @@
-[gd_scene load_steps=4 format=3]
+[gd_scene format=3 uid="uid://bw1r7ncgappki"]
 
-[ext_resource type="Script" path="res://scripts/level.gd" id="1_level"]
+[ext_resource type="Script" uid="uid://bec6j82ebslpm" path="res://scripts/level.gd" id="1_level"]
 [ext_resource type="PackedScene" path="res://scenes/Player.tscn" id="2_player"]
-[ext_resource type="Script" path="res://scripts/hud.gd" id="3_hud"]
+[ext_resource type="Script" uid="uid://bli6jkkqhyjr" path="res://scripts/hud.gd" id="3_hud"]
 
-[node name="Level01" type="Node2D"]
+[node name="Level01" type="Node2D" unique_id=1957389568]
 script = ExtResource("1_level")
 
-[node name="CanvasModulate" type="CanvasModulate" parent="."]
+[node name="CanvasModulate" type="CanvasModulate" parent="." unique_id=1902089703]
 color = Color(0.015, 0.017, 0.028, 1)
 
-[node name="Walls" type="Node2D" parent="."]
+[node name="Walls" type="Node2D" parent="." unique_id=1357446429]
 
-[node name="Player" parent="." instance=ExtResource("2_player")]
+[node name="Player" parent="." unique_id=1532265496 instance=ExtResource("2_player")]
 position = Vector2(96, 96)
 
-[node name="HUD" type="CanvasLayer" parent="."]
+[node name="HUD" type="CanvasLayer" parent="." unique_id=689091107]
 script = ExtResource("3_hud")

@@ -12,7 +12,8 @@ var last_reason := ""
 var _t0 := 0.0
 var _frozen := 0.0
 var _ended := true
-var _samples := 0
+var _entries := 0          # 进入格子的次数（不是帧数）
+var _last_cell := Vector2i(-9999, -9999)
 var _cells := {}
 var _runs: Array = []
 
@@ -22,7 +23,8 @@ func _ready() -> void:
 func start_session() -> void:
 	sonar_count = 0
 	last_reason = ""
-	_samples = 0
+	_entries = 0
+	_last_cell = Vector2i(-9999, -9999)
 	_cells.clear()
 	_frozen = 0.0
 	_ended = false
@@ -39,8 +41,14 @@ func note_sonar() -> void:
 func note_position(p: Vector2) -> void:
 	if _ended:
 		return
-	_samples += 1
-	_cells[Vector2i((p / CELL).floor())] = true
+	# 只在「换了一格」时记一次。以前每帧都记，站着不动也能刷到 0.95，
+	# 这个数就完全不代表"有没有走回头路"了。
+	var cell := Vector2i((p / CELL).floor())
+	if cell == _last_cell:
+		return
+	_last_cell = cell
+	_entries += 1
+	_cells[cell] = true
 
 func end_session(reason: String) -> void:
 	if _ended:
@@ -54,11 +62,17 @@ func end_session(reason: String) -> void:
 		"duration_s": snappedf(_frozen, 0.01),
 		"sonar_presses": sonar_count,
 		"cells_visited": _cells.size(),
-		"revisit_ratio": 0.0 if _samples == 0 else snappedf(1.0 - float(_cells.size()) / float(_samples), 0.001),
+		"entries": _entries,
+		"revisit_ratio": 0.0 if _entries == 0 else snappedf(1.0 - float(_cells.size()) / float(_entries), 0.001),
 	}
 	_runs.append(rec)
 	_save()
 	print("[GameLog] ", rec)
+
+func last_run() -> Dictionary:
+	if _runs.is_empty():
+		return {}
+	return _runs[_runs.size() - 1]
 
 func summary_text() -> String:
 	var n: int = mini(_runs.size(), HISTORY)

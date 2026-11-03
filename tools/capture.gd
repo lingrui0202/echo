@@ -51,6 +51,10 @@ func _process(_delta: float) -> bool:
 		_emitted_at = _ms()
 		if _sonar != null:
 			_sonar.emit()
+			var lvl := root.get_node_or_null("Level01")
+			var pl := root.get_node_or_null("Level01/Player")
+			if lvl != null and pl != null and lvl.has_method("emit_wave"):
+				lvl.emit_wave(pl.global_position)
 			print("[capture] sonar emitted")
 
 	if _emitted_at >= 0:

@@ -1,10 +1,12 @@
 extends SceneTree
-## 功能测试：把玩家瞬移到出口格，确认 Area2D 检测 → Player.win() → GameLog 记录 这条链真的通。
+## 功能测试：把玩家瞬移到出口格，确认 Area2D 检测 → Player.win() → GameLog 记录 → 结算面板 这条链真的通。
 ## 用法：
 ##   Godot_v4.7.2-stable_win64_console.exe --path <项目目录> --script res://tools/test_win.gd
+##
+## 顺带把结算面板截下来：_verify/win_panel.png
 
 const CELL := 64
-const EXIT_CELL := Vector2i(29, 15)     # 必须和 level.gd 地图里的 'E' 位置一致
+const EXIT_CELL := Vector2i(26, 14)     # 必须和 level.gd 地图里的 'E' 位置一致
 
 var _frames := 0
 var _player: Node2D = null
@@ -32,5 +34,14 @@ func _process(_delta: float) -> bool:
 			print("PASS: 走到出口触发通关，GameLog.last_reason = win")
 		else:
 			print("FAIL: last_reason = ", reason)
+
+	if _frames == 34:
+		var hud := root.get_node_or_null("Level01/HUD")
+		var panel_visible := false
+		if hud != null:
+			var p = hud.get("_result")
+			panel_visible = p != null and p.visible
+		root.get_texture().get_image().save_png("res://_verify/win_panel.png")
+		print("[test] 结算面板 visible = ", panel_visible, "，截图 _verify/win_panel.png")
 		return true
 	return false
