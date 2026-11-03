@@ -199,7 +199,7 @@ Godot_v4.7.2-stable_win64_console.exe --path <本目录> --script res://tools/ca
 
 ### 地图
 
-- 生成器 `make_maze2.py`：DFS 迷宫 + 环路 + 5 个 5×5 房间；逻辑格 2×2 字符 + 1 格墙 → 61×34，通道 128px。
+- 生成器 `tools/make_maze2.py`（纯 Python，不依赖 Godot）：DFS 迷宫 + 环路 + 5 个 5×5 房间；逻辑格 2×2 字符 + 1 格墙 → 61×34，通道 128px。改种子后生成的 `maze2_rows.txt` 直接贴进 `scripts/level.gd` 的 MAP。
 - 起点 (1,1)，出口 (26,14)，用 BFS 核对最短 144 步。
 - 为什么改成 2 格：1 格走廊里波反射会碎成一片小光斑，屏幕看着乱。
 
