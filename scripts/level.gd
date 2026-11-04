@@ -1,3 +1,4 @@
+@tool
 extends Node2D
 ## 关卡：从一张 ASCII 地图生成碰撞体 + 光照遮挡体 + 视觉。
 ##
@@ -18,6 +19,10 @@ const GridScript = preload("res://scripts/grid.gd")
 const SonarWave = preload("res://scripts/sonar_wave.gd")
 
 const CELL := 64
+
+# 全黑靠这层 modulate 实现。放在代码里而不是场景里：
+# 编辑器里不生成它，2D 视图就能直接看到整张地图。
+const DARK := Color(0.015, 0.017, 0.028)
 const START := Vector2i(1, 1)
 
 const MAP := [
@@ -60,7 +65,15 @@ const MAP := [
 var _wave: Node2D = null
 
 func _ready() -> void:
+	if not Engine.is_editor_hint():
+		var cm := CanvasModulate.new()
+		cm.name = "Darkness"
+		cm.color = DARK
+		add_child(cm)
+		move_child(cm, 0)
 	_build()
+	if Engine.is_editor_hint():
+		print("[level] 编辑器模式：已按 MAP 生成 %d 面墙" % $Walls.get_child_count())
 
 ## 玩家发声呐时把波注入到关卡里（真正的反射在这一层算）
 func emit_wave(p: Vector2) -> void:
@@ -68,6 +81,7 @@ func emit_wave(p: Vector2) -> void:
 		_wave.emit_at(p)
 
 func _build() -> void:
+	_clear_map()
 	var walls: Node2D = $Walls
 	var width := 0
 	for row in MAP:
@@ -98,13 +112,30 @@ func _build() -> void:
 	_add_wall(walls, -1, 0, 1, height)
 	_add_wall(walls, width, 0, 1, height)
 
-	# 声呐波场：跟地图同一套坐标，墙就是反射面
-	_wave = SonarWave.new()
-	_wave.setup(MAP, float(CELL))
-	add_child(_wave)
+	# 声呐波场：跟地图同一套坐标，墙就是反射面。编辑器里不需要，省得它一直刷新。
+	if not Engine.is_editor_hint():
+		_wave = SonarWave.new()
+		_wave.setup(MAP, float(CELL))
+		add_child(_wave)
 
-	var player: Node2D = $Player
-	player.global_position = Vector2(START.x * CELL + CELL * 0.5, START.y * CELL + CELL * 0.5)
+		var player: Node2D = $Player
+		player.global_position = Vector2(START.x * CELL + CELL * 0.5, START.y * CELL + CELL * 0.5)
+
+## 编辑器里改 MAP 会重复生成，先把上一次的产物清掉
+func _clear_map() -> void:
+	var walls := get_node_or_null("Walls")
+	if walls != null:
+		for c in walls.get_children():
+			c.free()
+	var old := get_node_or_null("MapLayer")
+	if old != null:
+		old.free()
+	var layer := Node2D.new()
+	layer.name = "MapLayer"
+	add_child(layer)
+
+func _map_layer() -> Node2D:
+	return get_node("MapLayer")
 
 func _add_ground(width: int, height: int) -> void:
 	var size := Vector2(width * CELL, height * CELL)
@@ -116,13 +147,13 @@ func _add_ground(width: int, height: int) -> void:
 	])
 	floor_poly.color = Color(0.22, 0.25, 0.34)
 	floor_poly.z_index = -10
-	add_child(floor_poly)
+	_map_layer().add_child(floor_poly)
 
 	var grid := GridScript.new()
 	grid.cells = Vector2i(width, height)
 	grid.cell = float(CELL)
 	grid.z_index = -9
-	add_child(grid)
+	_map_layer().add_child(grid)
 
 func _add_wall(parent: Node2D, cx: int, cy: int, cw: int, ch: int) -> void:
 	var size := Vector2(cw * CELL, ch * CELL)
@@ -184,7 +215,7 @@ func _add_goal(cx: int, cy: int) -> void:
 	area.add_child(glow)
 
 	area.body_entered.connect(_on_goal_entered)
-	add_child(area)
+	_map_layer().add_child(area)
 
 func _on_goal_entered(body: Node2D) -> void:
 	if body.has_method("win"):

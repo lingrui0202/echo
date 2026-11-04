@@ -225,3 +225,17 @@ Godot_v4.7.2-stable_win64_console.exe --path <本目录> --script res://tools/ca
 - `tools/smoke.gd`：挪到第 2 行走廊，1.0 s 右移 235 px；顶墙停在 x=3447（墙面 3456）；冷却 1→1→2（1.8 s）
 - `tools/test_win.gd`：瞬移到 (26,14) → 结算面板 visible = true，截图 `_verify/win_panel.png`
 - `tools/wave_shots.gd`：长走廊发一次声呐，200–1600 ms 连拍，见 `_verify/wave_strip.png`
+
+---
+
+## 在 Godot 编辑器里看地图
+
+打开 `scenes/Level01.tscn` 就能直接看到整张图：`scripts/level.gd` 是 `@tool` 脚本，
+在编辑器里也会按 `MAP` 生成墙、地板、网格和出口。改完 `MAP` 保存，视图会跟着重建。
+
+做到这一点的两个改动：
+- 全黑那层 `CanvasModulate` 从场景里拿掉了，改成 `level.gd` 运行时创建（常量 `DARK`）。
+  编辑器里没有它，所以 2D 视图是亮的；游戏里照旧全黑（实测暗场均值 6.0/255）。
+- `_build()` 每次先清掉上一次的 `MapLayer` 和 `Walls` 子节点，避免反复生成叠加。
+
+想一屏看全图：跑 `tools/editor_preview.gd`，输出 `_verify/editor_preview.png`。

@@ -7,9 +7,6 @@
 [node name="Level01" type="Node2D" unique_id=1957389568]
 script = ExtResource("1_level")
 
-[node name="CanvasModulate" type="CanvasModulate" parent="." unique_id=1902089703]
-color = Color(0.015, 0.017, 0.028, 1)
-
 [node name="Walls" type="Node2D" parent="." unique_id=1357446429]
 
 [node name="Player" parent="." unique_id=1532265496 instance=ExtResource("2_player")]
