@@ -6,7 +6,7 @@ extends SceneTree
 ## 产出：_verify/wave_<ms>.png
 
 const T_EMIT := 200
-const SHOTS := [200, 400, 600, 800, 1000, 1200, 1600]
+const SHOTS := [300, 600, 1000, 1600, 2000]
 const EMIT_CELL := Vector2i(30, 2)   # 第 2 行那条长走廊，能看清波怎么走
 
 var _t0 := 0
