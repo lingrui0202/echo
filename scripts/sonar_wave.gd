@@ -17,6 +17,10 @@ const MAX_BOUNCES := 5        # 允许反射几次
 const BOUNCE_LOSS := 0.72     # 每反射一次剩多少亮度
 const WALL_MASK := 1
 const MIN_RADIUS := 6.0
+# 相邻两个采样点的正常间距最大约 2πr/SEGMENTS ≈ 19 px（r=672 时）。
+# 超过一格（64 px）说明这两条射线走的不是同一条路（一条被墙截住、一条拐进了走廊），
+# 再连直线就会画出一条横穿墙壁的光柱 —— 之前截图里那些长直线就是这么来的。
+const MAX_JOIN_PX := 64.0
 
 const SIM_CELL := 32.0        # 边界记忆图的一格多少像素
 const EDGE_ALPHA := 0.26      # 撞墙时戳进去的亮度（淡，别抢波前的戏）
@@ -199,7 +203,7 @@ func draw_ring(d: CanvasItem) -> void:
 		var energy := _energies[i]
 		var alpha := fade * 0.9 * energy
 
-		if prev_ok and absf(energy - prev_energy) < 0.35:
+		if prev_ok and absf(energy - prev_energy) < 0.35 and prev.distance_to(pt) <= MAX_JOIN_PX:
 			d.draw_line(prev, pt, Color(0.55, 0.88, 1.0, alpha), 5.0)
 		else:
 			d.draw_circle(pt, 3.0, Color(0.65, 0.92, 1.0, alpha))

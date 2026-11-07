@@ -1,43 +1,31 @@
 extends PointLight2D
-## 声呐脉冲：向外推的一圈波前 + 一层很淡的余辉。
+## 声呐的"余晖"：一盏很淡的径向补光，让刚扫过的区域慢一点变黑。
 ##
-## 第 5 周试玩反馈："应该是波形向外，而不是中间亮四周暗"。
-## 所以这里拆成两盏灯：
-##   自己      —— 径向补光，energy 很低，只让扫过的区域留一点余辉
-##   Wave 子灯 —— 环状贴图，energy 高，跟同一个 texture_scale 向外扩，这才是"波前"
+## 真正的波前不在这里，在 scripts/sonar_wave.gd（几何线 + 反射）。
+## 第 6 周把波前改成几何线后，这盏灯里的 Wave 子灯和圆形光环就成了死代码
+## （RING_PEAK 恒为 0、_draw 是空的），一起删掉了，省得两套覆盖范围打架。
 ##
-## shadow_enabled = true，光会被 LightOccluder2D 挡住，所以波前只在真正看得到的地方出现。
+## 半径对齐：
+##   余晖  256 * MAX_SCALE 5.25 = 1344 px 直径 → 672 px 半径
+##   波前  420 px/s × 1.6 s                 → 672 px 半径
+## 两者一样大，看上去才是"波推过去、身后留一点余晖"，而不是波还没到远处就先亮一片。
 ##
-## 调参提示：
-##   DURATION  —— 一次回声持续多久
-##   MAX_SCALE —— 回声能照多远（texture_scale 的倍数）
-##   FILL_PEAK / RING_PEAK —— 余辉多亮 / 波前多亮
+## shadow_enabled = true，余晖同样被墙挡住。
+##
+## 调参：DURATION 余晖留多久，FILL_PEAK 余晖多亮（0.12 很淡，别抢波前的戏）。
 
 const DURATION := 1.05
-const MAX_SCALE := 6.5
+const MAX_SCALE := 5.25
 const MIN_SCALE := 0.3
-const FILL_PEAK := 0.12      # 只留一点点余辉，别抢波的戏
-const RING_PEAK := 0.0       # 圆形扩展光环：关掉，改用 scripts/sonar_wave.gd
+const FILL_PEAK := 0.12
 
 var _t := -1.0
-var _radius_px := 128.0
-var _wave: PointLight2D = null
 
-func setup(fill_tex: Texture2D, ring_tex: Texture2D) -> void:
+func setup(fill_tex: Texture2D) -> void:
 	texture = fill_tex
-	if _wave == null:
-		_wave = PointLight2D.new()
-		_wave.name = "Wave"
-		_wave.shadow_enabled = true
-		_wave.color = Color(0.55, 0.88, 1.0)
-		add_child(_wave)
-	_wave.texture = ring_tex
-	_wave.energy = 0.0
-	_wave.texture_scale = MIN_SCALE
 	_t = -1.0
 	energy = 0.0
 	texture_scale = MIN_SCALE
-	queue_redraw()
 
 func emit() -> void:
 	_t = 0.0
@@ -50,20 +38,9 @@ func _process(delta: float) -> void:
 		return
 	_t += delta
 	var k := clampf(_t / DURATION, 0.0, 1.0)
-	var grow := sqrt(k)                      # 先快后慢，像真实的波前
-	texture_scale = lerpf(MIN_SCALE, MAX_SCALE, grow)
+	texture_scale = lerpf(MIN_SCALE, MAX_SCALE, sqrt(k))   # 先快后慢，像真实的波前
 	energy = (1.0 - k) * FILL_PEAK
-	if _wave != null:
-		_wave.texture_scale = texture_scale
-		_wave.energy = (1.0 - k) * RING_PEAK
-	queue_redraw()
 	if k >= 1.0:
 		_t = -1.0
 		energy = 0.0
 		texture_scale = MIN_SCALE
-		if _wave != null:
-			_wave.energy = 0.0
-
-func _draw() -> void:
-	# 圆形波纹已经交给 sonar_wave.gd 的波场去画了，这里不再画圈
-	pass

@@ -19,11 +19,17 @@ var _cd := 0.0
 var _alive := true
 
 func _ready() -> void:
+	add_to_group("player")
 	ambient.texture = LightFactory.ring_texture(AMBIENT_RADIUS * 2, 0.45, 0.82)
 	ambient.energy = AMBIENT_ENERGY
 	ambient.texture_scale = 1.0
-	sonar.setup(LightFactory.radial_texture(256), LightFactory.ring_texture(256))
+	sonar.setup(LightFactory.radial_texture(256))
 	GameLog.start_session()
+	GameLog.set_config({
+		"sonar_cooldown": SONAR_COOLDOWN,
+		"ambient_radius": AMBIENT_RADIUS,
+		"ambient_energy": AMBIENT_ENERGY,
+	})
 	queue_redraw()
 
 func _physics_process(delta: float) -> void:
@@ -58,3 +64,12 @@ func win() -> void:
 	_alive = false
 	velocity = Vector2.ZERO
 	GameLog.end_session("win")
+
+## 被敌人碰到：和通关共用同一套结算，只是 reason 不同。
+## 顺序不能反：先停再记，否则最后一帧还会移动。
+func caught() -> void:
+	if not _alive:
+		return
+	_alive = false
+	velocity = Vector2.ZERO
+	GameLog.end_session("caught")

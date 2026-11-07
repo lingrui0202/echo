@@ -13,7 +13,8 @@ extends SceneTree
 
 const CELL := 64
 const SPEED := 235.0
-const COOLDOWN_MS := 1800
+# 冷却不再在这里写死：从 player.gd 的 SONAR_COOLDOWN 读，避免改参数后测试跟着漂。
+var _cd_ms := 1800
 # 新地图（61x34，2 格宽通道）里最长的一条横走廊：第 2 行，第 16..53 列是空地，54 列是墙
 const LANE_ROW := 2
 const LANE_COL := 17
@@ -32,6 +33,10 @@ func _initialize() -> void:
 	root.size = Vector2i(1152, 648)
 	var ps: PackedScene = load("res://scenes/Level01.tscn")
 	root.add_child(ps.instantiate())
+	var p: Node = root.get_node_or_null("Level01/Player")
+	if p != null:
+		var consts: Dictionary = p.get_script().get_script_constant_map()
+		_cd_ms = int(round(float(consts.get("SONAR_COOLDOWN", 1.8)) * 1000.0))
 	_t0 = Time.get_ticks_msec()
 
 func _ms() -> int:
@@ -106,16 +111,16 @@ func _process(_delta: float) -> bool:
 		if _gl_count() != 1:
 			_fails.append("冷却内重复触发：sonar_count = %d（应仍为 1）" % _gl_count())
 
-	if _at(2300 + COOLDOWN_MS + 300, "tap3_after_cooldown"):
+	if _at(2300 + _cd_ms + 300, "tap3_after_cooldown"):
 		Input.action_press("sonar")
 		_release_action = &"sonar"
 
-	if _at(2300 + COOLDOWN_MS + 500, "check_tap3"):
+	if _at(2300 + _cd_ms + 500, "check_tap3"):
 		if _gl_count() != 2:
 			_fails.append("冷却结束后没恢复：sonar_count = %d（应为 2）" % _gl_count())
 		print("OK  冷却：1 -> 冷却内仍 1 -> 冷却后 2")
 
-	if _ms() > 2300 + COOLDOWN_MS + 800:
+	if _ms() > 2300 + _cd_ms + 800:
 		if _fails.is_empty():
 			print("PASS: 移动 / 碰撞 / 声呐冷却 三条链路均正常")
 		else:

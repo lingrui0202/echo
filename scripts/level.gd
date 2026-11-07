@@ -9,7 +9,6 @@ extends Node2D
 ##
 ## 地图规则：
 ##   61x34 格，通道 2 格宽（第 6 周把 1 格走廊改宽了：1 格走廊里波反射看着很碎）。
-##   61x34 格，通道 2 格宽（第 6 周把 1 格走廊改宽了：1 格走廊里波反射看着很碎）。
 ##   '#' = 墙     '.' = 地面
 ##   'E' = 出口
 ## 起点在 START 里改。边界墙由代码自动补齐，不用写。
@@ -17,8 +16,18 @@ extends Node2D
 const LightFactory = preload("res://scripts/light_factory.gd")
 const GridScript = preload("res://scripts/grid.gd")
 const SonarWave = preload("res://scripts/sonar_wave.gd")
+const Maze = preload("res://scripts/maze.gd")
+const EnemyScene = preload("res://scenes/Enemy.tscn")
+const EnemyScript = preload("res://scripts/enemy.gd")
 
 const CELL := 64
+
+# 敌人出生点不手写坐标：先算「起点 → 出口」的最短路，按路线长度取 30% 和 65% 两处，
+# 放在路线旁边的开放格上（优先不在路线上，避免堵死唯一通道）。
+# 这样玩家沿正常路线走一定会经过它们附近；地图改了也不用重对坐标。
+const ENEMY_COUNT := 2
+const ENEMY_SEP := 10
+const ENEMY_ROUTE_FRACS := [0.30, 0.65]
 
 # 全黑靠这层 modulate 实现。放在代码里而不是场景里：
 # 编辑器里不生成它，2D 视图就能直接看到整张地图。
@@ -63,6 +72,8 @@ const MAP := [
 ]
 
 var _wave: Node2D = null
+var _goal_cell := Vector2i(-1, -1)
+var _enemy_cells: Array = []
 
 func _ready() -> void:
 	if not Engine.is_editor_hint():
@@ -75,10 +86,22 @@ func _ready() -> void:
 	if Engine.is_editor_hint():
 		print("[level] 编辑器模式：已按 MAP 生成 %d 面墙" % $Walls.get_child_count())
 
-## 玩家发声呐时把波注入到关卡里（真正的反射在这一层算）
+## 给工具/自检用的只读接口，避免测试再抄一份坐标。
+func map_rows() -> Array:
+	return MAP
+
+func start_cell() -> Vector2i:
+	return START
+
+func enemy_cells() -> Array:
+	return _enemy_cells
+
+
+## 玩家发声呐时把波注入到关卡里（真正的反射在这一层算），并把声音传给敌人。
 func emit_wave(p: Vector2) -> void:
 	if _wave != null:
 		_wave.emit_at(p)
+	_alarm(p)
 
 func _build() -> void:
 	_clear_map()
@@ -115,11 +138,115 @@ func _build() -> void:
 	# 声呐波场：跟地图同一套坐标，墙就是反射面。编辑器里不需要，省得它一直刷新。
 	if not Engine.is_editor_hint():
 		_wave = SonarWave.new()
+		_wave.name = "SonarWave"
 		_wave.setup(MAP, float(CELL))
 		add_child(_wave)
 
 		var player: Node2D = $Player
 		player.global_position = Vector2(START.x * CELL + CELL * 0.5, START.y * CELL + CELL * 0.5)
+		_setup_camera(player, width, height)
+		_spawn_enemies()
+		_note_config(width, height)
+
+## 相机跟随玩家，但别让视口露出地图外：限位到地图矩形，并加一点平滑。
+## 不设限位时，站在起点（地图左上角）会有半个屏幕是地图外的黑，很出戏。
+func _setup_camera(player: Node2D, width: int, height: int) -> void:
+	var cam := player.get_node_or_null("Camera2D") as Camera2D
+	if cam == null:
+		return
+	cam.limit_left = 0
+	cam.limit_top = 0
+	cam.limit_right = width * CELL
+	cam.limit_bottom = height * CELL
+	cam.limit_smoothed = true
+	cam.position_smoothing_enabled = true
+	cam.position_smoothing_speed = 8.0
+	cam.reset_smoothing()
+
+
+## 敌人：出生点由 BFS 距离决定（不写死坐标），追击寻路也走同一张图。
+## 放在独立容器 Enemies 里，重载/重建时整批清掉。
+func _spawn_enemies() -> void:
+	var enemies := get_node_or_null("Enemies")
+	if enemies == null:
+		enemies = Node2D.new()
+		enemies.name = "Enemies"
+		add_child(enemies)
+	else:
+		for c in enemies.get_children():
+			c.free()
+
+	var route := Maze.path(MAP, START, _goal_cell)
+	_enemy_cells.clear()
+	for frac in ENEMY_ROUTE_FRACS:
+		if _enemy_cells.size() >= ENEMY_COUNT or route.is_empty():
+			break
+		var idx := clampi(int(round(float(route.size()) * float(frac))), 0, route.size() - 1)
+		var anchor: Vector2i = route[idx]
+		# 只取上下左右四邻格：相邻格之间没有墙，敌人一定在路线旁边、看得见。
+		# 不取斜角/隔一格，那样可能隔着墙，算「近」其实看不见。
+		var best := Vector2i(-1, -1)
+		for dir in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var cell: Vector2i = anchor + dir
+			if cell == _goal_cell or cell == START or route.has(cell):
+				continue
+			if not Maze.is_open(MAP, cell):
+				continue
+			var ok := true
+			for other in _enemy_cells:
+				if Vector2i(other).distance_to(cell) < ENEMY_SEP:
+					ok = false
+					break
+			if not ok:
+				continue
+			best = cell
+			break
+		if best.x >= 0:
+			_enemy_cells.append(best)
+		else:
+			# 极端情况（锚点周围全被堵死）：退回锚点，自检会报出来
+			_enemy_cells.append(anchor)
+
+	for cell in _enemy_cells:
+		var e := EnemyScene.instantiate()
+		enemies.add_child(e)
+		e.setup(MAP, float(CELL), cell)
+
+
+## 声呐广播：听觉穿墙，不做视线判定。被惊动的数量记进遥测（HUD 会闪一下提示）。
+func _alarm(p: Vector2) -> void:
+	var enemies := get_node_or_null("Enemies")
+	if enemies == null:
+		return
+	var heard := 0
+	for e in enemies.get_children():
+		if e.has_method("hear") and e.hear(p):
+			heard += 1
+	if heard > 0:
+		GameLog.note_alert(heard)
+
+
+## 把这一局的地图/波参数写进遥测。改完参数后数据才解释得通：
+## "1.8 s 冷却那 10 局" 和 "2.4 s 冷却那 10 局" 必须能分开。
+func _note_config(width: int, height: int) -> void:
+	var gl := get_node_or_null("/root/GameLog")
+	if gl == null:
+		return
+	gl.set_config({
+		"level": scene_file_path.get_file(),
+		"map_w": width,
+		"map_h": height,
+		"cell": CELL,
+		"wave_speed": SonarWave.RING_SPEED,
+		"wave_duration": SonarWave.DURATION,
+		"max_bounces": SonarWave.MAX_BOUNCES,
+		"segments": SonarWave.SEGMENTS,
+		"enemy_count": _enemy_cells.size(),
+		"enemy_hear_radius": EnemyScript.HEAR_RADIUS,
+		"enemy_speed": EnemyScript.SPEED,
+		"enemy_chase_time": EnemyScript.CHASE_TIME,
+	})
+
 
 ## 编辑器里改 MAP 会重复生成，先把上一次的产物清掉
 func _clear_map() -> void:
@@ -189,6 +316,7 @@ func _add_wall(parent: Node2D, cx: int, cy: int, cw: int, ch: int) -> void:
 	parent.add_child(body)
 
 func _add_goal(cx: int, cy: int) -> void:
+	_goal_cell = Vector2i(cx, cy)
 	var area := Area2D.new()
 	area.position = Vector2(cx * CELL, cy * CELL) + Vector2(CELL, CELL) * 0.5
 	area.collision_layer = 4
@@ -206,12 +334,15 @@ func _add_goal(cx: int, cy: int) -> void:
 	vis.color = Color(0.30, 1.0, 0.65)
 	area.add_child(vis)
 
-	# 出口自己是弱光源，黑暗中像一个灯塔
+	# 出口自己是弱光源，黑暗中像一个灯塔。
+	# shadow_enabled 必须打开：PointLight2D 默认不吃遮挡体，不打开的话
+	# 这道绿光会穿墙亮出来，等于提前剧透出口位置。
 	var glow := PointLight2D.new()
 	glow.texture = LightFactory.radial_texture(128)
 	glow.energy = 0.55
-	glow.texture_scale = 0.9
+	glow.texture_scale = 0.7
 	glow.color = Color(0.4, 1.0, 0.7)
+	glow.shadow_enabled = true
 	area.add_child(glow)
 
 	area.body_entered.connect(_on_goal_entered)

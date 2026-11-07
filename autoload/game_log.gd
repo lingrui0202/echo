@@ -4,10 +4,19 @@ extends Node
 
 const SAVE_PATH := "user://runs.json"
 const HISTORY := 10
+const MAX_RUNS := 200
 const CELL := 64.0
 
 var sonar_count := 0
+var alert_count := 0
 var last_reason := ""
+var _alert_at := -99999.0
+## 这一局生效的参数（冷却、地图尺寸、波速……）。每条记录都会带上它。
+## 没有它，改完 1.8 → 2.4 之后两份数据就分不清是哪套参数跑的。
+var config := {}
+## 自检/截图用：false 时记录只留在内存里，不写 user://runs.json。
+## 正常游戏永远是 true；selfcheck 在测「被抓」链路时会临时关掉，免得污染玩家数据。
+var persist := true
 
 var _t0 := 0.0
 var _frozen := 0.0
@@ -22,7 +31,10 @@ func _ready() -> void:
 
 func start_session() -> void:
 	sonar_count = 0
+	alert_count = 0
+	_alert_at = -99999.0
 	last_reason = ""
+	config.clear()
 	_entries = 0
 	_last_cell = Vector2i(-9999, -9999)
 	_cells.clear()
@@ -37,6 +49,21 @@ func elapsed() -> float:
 
 func note_sonar() -> void:
 	sonar_count += 1
+
+## 有东西听见了声呐。count 是这一声惊动的敌人数。
+## 记时间戳是为了让 HUD 闪一下提示 —— 没有提示的话"被听见"是看不见的。
+func note_alert(count: int) -> void:
+	if count <= 0:
+		return
+	alert_count += count
+	_alert_at = Time.get_ticks_msec() / 1000.0
+
+func alert_age() -> float:
+	return Time.get_ticks_msec() / 1000.0 - _alert_at
+
+## 把这一局生效的参数并进 config。player.gd 记冷却/光圈，level.gd 记地图/波参数。
+func set_config(d: Dictionary) -> void:
+	config.merge(d, true)
 
 func note_position(p: Vector2) -> void:
 	if _ended:
@@ -61,11 +88,15 @@ func end_session(reason: String) -> void:
 		"reason": reason,
 		"duration_s": snappedf(_frozen, 0.01),
 		"sonar_presses": sonar_count,
+		"alerts": alert_count,
 		"cells_visited": _cells.size(),
 		"entries": _entries,
 		"revisit_ratio": 0.0 if _entries == 0 else snappedf(1.0 - float(_cells.size()) / float(_entries), 0.001),
+		"config": config.duplicate(true),
 	}
 	_runs.append(rec)
+	if _runs.size() > MAX_RUNS:
+		_runs = _runs.slice(_runs.size() - MAX_RUNS)
 	_save()
 	print("[GameLog] ", rec)
 
@@ -98,8 +129,18 @@ func summary_text() -> String:
 	lines.append("平均走过格子    %.0f" % (float(total_cells) / n))
 	lines.append("平均重复率      %.0f %%" % (total_revisit / n * 100.0))
 	lines.append("通关率          %d / %d" % [wins, n])
+	var best := 0.0
+	for rec in _runs:
+		if String(rec.get("reason", "")) == "win":
+			var d := float(rec.get("duration_s", 0.0))
+			if best <= 0.0 or d < best:
+				best = d
+	if best > 0.0:
+		lines.append("最好成绩        %.1f s" % best)
 	lines.append("")
 	lines.append("本局：%s   %.1f s   声呐 %d 次" % [last_reason, elapsed(), sonar_count])
+	if config.has("sonar_cooldown"):
+		lines.append("本局参数：冷却 %.1f s" % float(config["sonar_cooldown"]))
 	lines.append("（数据文件：user://runs.json）")
 	return "\n".join(lines)
 
@@ -112,8 +153,12 @@ func _load() -> void:
 	var data: Variant = JSON.parse_string(f.get_as_text())
 	if data is Array:
 		_runs = data
+		if _runs.size() > MAX_RUNS:
+			_runs = _runs.slice(_runs.size() - MAX_RUNS)
 
 func _save() -> void:
+	if not persist:
+		return
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)
 	if f == null:
 		return

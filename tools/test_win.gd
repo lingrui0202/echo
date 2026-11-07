@@ -6,7 +6,7 @@ extends SceneTree
 ## 顺带把结算面板截下来：_verify/win_panel.png
 
 const CELL := 64
-const EXIT_CELL := Vector2i(26, 14)     # 必须和 level.gd 地图里的 'E' 位置一致
+const EXIT_CELL := Vector2i(26, 14)     # 仅当关卡没有暴露 _goal_cell 时兜底
 
 var _frames := 0
 var _player: Node2D = null
@@ -24,8 +24,15 @@ func _process(_delta: float) -> bool:
 		if _player == null:
 			print("FAIL: 找不到 Player")
 			return true
-		_player.global_position = Vector2(EXIT_CELL.x * CELL + CELL * 0.5, EXIT_CELL.y * CELL + CELL * 0.5)
-		print("[test] 玩家已瞬移到出口 ", EXIT_CELL)
+		# 出口格从关卡里读，别和 level.gd 的 MAP 各写一份
+		var cell := EXIT_CELL
+		var level := root.get_node_or_null("Level01")
+		if level != null:
+			var v: Variant = level.get("_goal_cell")
+			if v is Vector2i and (v as Vector2i).x >= 0:
+				cell = v
+		_player.global_position = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
+		print("[test] 玩家已瞬移到出口 ", cell)
 
 	if _frames == 20:
 		var gl := root.get_node_or_null("GameLog")
