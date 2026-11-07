@@ -1,6 +1,6 @@
 # 02 · 实体定义
 
-> 状态：✅ 全部实现（第 8 周补上 Enemy 与 Maze）
+> 状态：✅ 全部实现（第 7 周补上 Enemy 与 Maze）
 
 ## 实体总表
 
@@ -69,7 +69,7 @@
 | `Boot` | 在 `_ready` 里注册 7 个动作 | 不写进 `project.godot` 的 Input Map |
 | `GameLog` | 开局/结束/统计/落盘 | `start_session()` 清空本局，`end_session()` 才写盘 |
 
-## Enemy（✅ 第 8 周）
+## Enemy（✅ 第 7 周）
 
 | 项 | 实现值 | 说明 |
 |---|---|---|
