@@ -299,10 +299,12 @@ Godot_v4.7.2-stable_win64_console.exe --path <本目录> res://tools/selfcheck.t
 
 结论：这两处暂时不是瓶颈（1.2 ms ≈ 60 fps 预算的 7%），所以**这周没有**动「复用 ray query / 降到 144 段 / 只衰减活跃格」。等敌人进来、单帧预算变紧时再复查，避免为了 0.5 ms 改坏已经调好的手感。
 
-### 还没验证（照实写）
+### 验证状态
 
-- `tools/smoke.gd` 与 `tools/test_win.gd` 这周没在 CLI 下重跑：本机只跑了 `selfcheck.tscn` 和主场景启动，都是零错误退出。冷却常量的读取方式变了，逻辑没变，下次跑 CLI 时确认一次。
-- `_verify/win_panel.png` 还是第 6 周那张（HUD 文案已改，需要重跑 `test_win.gd` 再截）。
+- `tools/smoke.gd` 与 `tools/test_win.gd`：**已补跑，均 PASS**（11-07 合并后，CLI 下）。
+  冷却常量改为从 `player.gd` 读取后，实测仍是 1→1→2。
+- `_verify/win_panel.png`：**已重截**，HUD 文案与当前版本一致。
+- 仍未验证：真人试玩（敌人加进来之后的手感、难度曲线都没测过）。
 
 ---
 
