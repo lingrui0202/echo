@@ -17,6 +17,8 @@ var config := {}
 ## 自检/截图用：false 时记录只留在内存里，不写 user://runs.json。
 ## 正常游戏永远是 true；selfcheck 在测「被抓」链路时会临时关掉，免得污染玩家数据。
 var persist := true
+## 这条记录是哪来的：campaign（正式）/ test（测试模式）/ tool（自检脚本）
+var mode_tag := "campaign"
 
 var _t0 := 0.0
 var _frozen := 0.0
@@ -83,6 +85,7 @@ func end_session(reason: String) -> void:
 	_ended = true
 	last_reason = reason
 	_frozen = Time.get_ticks_msec() / 1000.0 - _t0
+	var lvl_idx := int(config.get("level_index", 0))
 	var rec := {
 		"when": Time.get_datetime_string_from_system(),
 		"reason": reason,
@@ -92,6 +95,8 @@ func end_session(reason: String) -> void:
 		"cells_visited": _cells.size(),
 		"entries": _entries,
 		"revisit_ratio": 0.0 if _entries == 0 else snappedf(1.0 - float(_cells.size()) / float(_entries), 0.001),
+		"grade": grade_for(_frozen, sonar_count, alert_count, lvl_idx),
+		"mode": mode_tag,
 		"config": config.duplicate(true),
 	}
 	_runs.append(rec)
@@ -99,6 +104,65 @@ func end_session(reason: String) -> void:
 		_runs = _runs.slice(_runs.size() - MAX_RUNS)
 	_save()
 	print("[GameLog] ", rec)
+
+## 历史最好成绩（只算通关的局），排除最后一条（正在结算的这一局）。
+func best_duration(exclude_last: bool = true) -> float:
+	var best := INF
+	var n := _runs.size() - (1 if exclude_last else 0)
+	for i in n:
+		var r: Dictionary = _runs[i]
+		if String(r.get("reason", "")) != "win":
+			continue
+		best = minf(best, float(r.get("duration_s", INF)))
+	return best
+
+
+## 目标时间：走完最短路所需时间 × 2（要摸黑探路、还要绕开敌人，翻倍算合理）。
+## 评价只看「实际用时 / 目标时间」，被听见每次再加 5% —— 规则简单，玩家能自己算。
+const PLAYER_SPEED := 235.0
+const PAR_FACTOR := 2.0
+
+func par_seconds(route_len: int) -> float:
+	return maxf(20.0, float(route_len) * CELL / PLAYER_SPEED * PAR_FACTOR)
+
+func grade_for(duration: float, sonar: int, alerts: int, level_idx: int) -> String:
+	var route_len := int(config.get("route_len", 120))
+	return grade_with_par(duration, alerts, par_seconds(route_len))
+
+func grade_with_par(duration: float, alerts: int, par: float) -> String:
+	var eff := duration * (1.0 + 0.05 * float(alerts))   # 每次被听见按慢 5% 算
+	var ratio := eff / maxf(par, 1.0)
+	if ratio <= 1.0:
+		return "S"
+	if ratio <= 1.35:
+		return "A"
+	if ratio <= 1.75:
+		return "B"
+	if ratio <= 2.3:
+		return "C"
+	return "D"
+
+
+## 某一关成绩最好的几局（只算通关），给排行榜用。
+func top_runs(level_idx: int, n: int = 3) -> Array:
+	var list: Array = []
+	for r in _runs:
+		if String(r.get("reason", "")) != "win":
+			continue
+		var cfg: Dictionary = r.get("config", {})
+		if int(cfg.get("level_index", 0)) != level_idx:
+			continue
+		# 只认正式存档的记录；测试/自检跑出来的不算成绩
+		if String(r.get("mode", "")) != "campaign":
+			continue
+		list.append(r)
+	list.sort_custom(func(a, b): return float(a.get("duration_s", 1e9)) < float(b.get("duration_s", 1e9)))
+	return list.slice(0, mini(n, list.size()))
+
+
+func history_size() -> int:
+	return _runs.size()
+
 
 func last_run() -> Dictionary:
 	if _runs.is_empty():

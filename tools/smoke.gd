@@ -15,11 +15,11 @@ const CELL := 64
 const SPEED := 235.0
 # 冷却不再在这里写死：从 player.gd 的 SONAR_COOLDOWN 读，避免改参数后测试跟着漂。
 var _cd_ms := 1800
-# 新地图（61x34，2 格宽通道）里最长的一条横走廊：第 2 行，第 16..53 列是空地，54 列是墙
-const LANE_ROW := 2
-const LANE_COL := 17
-const WALL_X := 54.0           # 该行墙的左边缘（第 54 列）
-const WALL_ROW_Y := 2.5
+# 走廊不再写死：进关卡后按 MAP 找一条最长的横向空地，再取它右边的墙。
+var LANE_ROW := 2
+var LANE_COL := 17
+var WALL_X := 54.0
+var WALL_ROW_Y := 2.5
 
 var _t0 := 0
 var _done: Array[String] = []
@@ -49,6 +49,30 @@ func _at(ms: int, tag: String) -> bool:
 		return true
 	return false
 
+## 找一条最长的横向空地，并记住它右边那面墙 —— 不同关卡尺寸不同，不能写死。
+func _pick_lane() -> void:
+	var lv := root.get_node_or_null("Level01")
+	var rows: Array = lv.map_rows() if lv != null else []
+	var best_len := 0
+	for y in rows.size():
+		var row := String(rows[y])
+		var x := 0
+		while x < row.length():
+			if row[x] == "#":
+				x += 1
+				continue
+			var x0 := x
+			while x < row.length() and row[x] != "#":
+				x += 1
+			var run := x - x0
+			if run > best_len and x < row.length():
+				best_len = run
+				LANE_ROW = y
+				LANE_COL = x0
+				WALL_X = float(x)
+				WALL_ROW_Y = y + 0.5
+
+
 func _gl_count() -> int:
 	var gl := root.get_node_or_null("GameLog")
 	if gl == null:
@@ -66,7 +90,8 @@ func _process(_delta: float) -> bool:
 		if _player == null:
 			print("FAIL: 找不到 Player，关卡没建起来")
 			return true
-		# 挪到第 2 行那条长走廊，右边连着三十多格空地
+		_pick_lane()
+		# 挪到最长那条横走廊的起点，右边连着十几格空地
 		_player.global_position = Vector2((LANE_COL + 0.5) * CELL, (LANE_ROW + 0.5) * CELL)
 		_start_x = _player.global_position.x
 		_move_from = _ms()

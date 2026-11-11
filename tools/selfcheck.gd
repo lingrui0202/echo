@@ -15,9 +15,11 @@ extends Node
 ## 全部 PASS 时进程返回 0。
 
 const CELL := 64
-const MAP_W := 61
-const MAP_H := 34
+var _map_w := 0
+var _map_h := 0
+var _expect_enemies := 0
 const Maze = preload("res://scripts/maze.gd")
+const EnemyScript = preload("res://scripts/enemy.gd")
 
 var _level: Node2D
 var _player: Node2D
@@ -34,6 +36,14 @@ var _route_len := 0
 var _route_min := 9999
 
 func _ready() -> void:
+	var _gl := get_node_or_null("/root/GameLog")
+	if _gl != null:
+		_gl.set("mode_tag", "tool")
+		_gl.set("persist", false)
+	# 多关之后，自检固定跑第 3 关（有敌人），结构断言再从关卡本身读
+	var prog := get_node_or_null("/root/Progress")
+	if prog != null:
+		prog.set("level_index", 2)
 	var ps: PackedScene = load("res://scenes/Level01.tscn")
 	_level = ps.instantiate()
 	_level.name = "Level01"
@@ -81,6 +91,11 @@ func _capture(path: String) -> void:
 		img.save_png(path)
 
 func _check_static() -> void:
+	var rows0: Array = _level.map_rows()
+	_map_w = String(rows0[0]).length()
+	_map_h = rows0.size()
+	_expect_enemies = int(_level.ENEMY_BY_LEVEL[_level.level_index])
+
 	_player = _level.get_node_or_null("Player")
 	_check(_player != null, "Player 节点存在", "找不到 Player")
 	if _player == null:
@@ -92,15 +107,19 @@ func _check_static() -> void:
 		"墙体没生成")
 
 	var goal: Variant = _level.get("_goal_cell")
-	_check(goal is Vector2i and goal == Vector2i(26, 14),
-		"出口格 = (26, 14)", "出口格不对：%s" % str(goal))
+	var goal_ok := false
+	if goal is Vector2i:
+		var g: Vector2i = goal
+		goal_ok = g.y >= 0 and g.y < rows0.size() and g.x >= 0 \
+			and g.x < String(rows0[g.y]).length() and String(rows0[g.y])[g.x] == "E"
+	_check(goal_ok, "出口格 %s 在地图内且是 E" % str(goal), "出口格不对：%s" % str(goal))
 
 	_check(_level.get_node_or_null("Darkness") != null,
 		"全黑层 CanvasModulate 已创建", "缺少全黑层")
 
 	_cam = _player.get_node_or_null("Camera2D") as Camera2D
-	_check(_cam != null and _cam.limit_right == MAP_W * CELL and _cam.limit_bottom == MAP_H * CELL,
-		"相机限位 = %d×%d px" % [MAP_W * CELL, MAP_H * CELL],
+	_check(_cam != null and _cam.limit_right == _map_w * CELL and _cam.limit_bottom == _map_h * CELL,
+		"相机限位 = %d×%d px" % [_map_w * CELL, _map_h * CELL],
 		"相机限位不对：%s" % (str(_cam.limit_right) + "×" + str(_cam.limit_bottom) if _cam != null else "无相机"))
 	_check(_cam != null and _cam.position_smoothing_enabled,
 		"相机平滑已开启", "相机平滑没开")
@@ -112,18 +131,18 @@ func _check_static() -> void:
 	var cfg: Dictionary = gl.config if gl != null else {}
 	_check(is_equal_approx(float(cfg.get("sonar_cooldown", 0.0)), 1.8),
 		"遥测 config 记录冷却 1.8 s", "config 里没有正确的 sonar_cooldown：%s" % str(cfg))
-	_check(int(cfg.get("map_w", 0)) == MAP_W and int(cfg.get("map_h", 0)) == MAP_H,
-		"遥测 config 记录地图 %d×%d" % [MAP_W, MAP_H], "config 地图尺寸不对：%s" % str(cfg))
-	_check(int(cfg.get("enemy_count", 0)) == 2,
-		"遥测 config 记录敌人 2 只", "config 里的 enemy_count 不对：%s" % str(cfg))
+	_check(int(cfg.get("map_w", 0)) == _map_w and int(cfg.get("map_h", 0)) == _map_h,
+		"遥测 config 记录地图 %d×%d" % [_map_w, _map_h], "config 地图尺寸不对：%s" % str(cfg))
+	_check(int(cfg.get("enemy_count", 0)) == _expect_enemies,
+		"遥测 config 记录敌人 %d 只" % _expect_enemies, "config 里的 enemy_count 不对：%s" % str(cfg))
 	_check(is_equal_approx(float(cfg.get("enemy_hear_radius", 0.0)), 700.0),
 		"遥测 config 记录听觉半径 700 px", "config 里的 enemy_hear_radius 不对：%s" % str(cfg))
-	_check(is_equal_approx(float(cfg.get("enemy_speed", 0.0)), 110.0),
-		"遥测 config 记录敌人速度 110 px/s", "config 里的 enemy_speed 不对：%s" % str(cfg))
+	_check(is_equal_approx(float(cfg.get("enemy_speed", 0.0)), EnemyScript.SPEED),
+		"遥测 config 记录敌人速度 %.0f px/s" % EnemyScript.SPEED, "config 里的 enemy_speed 不对：%s" % str(cfg))
 
 	var box := _level.get_node_or_null("Enemies")
 	var count := box.get_child_count() if box != null else 0
-	_check(count == 2, "敌人已生成 2 只", "敌人数量不对：%d" % count)
+	_check(count == _expect_enemies, "敌人已生成 %d 只" % _expect_enemies, "敌人数量不对：%d" % count)
 	if box != null:
 		_enemies = box.get_children()
 	if _enemies.is_empty():
@@ -166,7 +185,7 @@ func _check_runtime() -> void:
 	_check(not e.is_chasing(), "初始状态：敌人没在追", "敌人一开始就在追")
 	e.hear(e.global_position + Vector2(2000, 0))
 	_check(not e.is_chasing(), "听觉半径外：不追", "超出听觉半径仍然追击")
-	e.hear(e.global_position + Vector2(100, 0))
+	e.hear(e.global_position)   # 站自己格子上：一定在听觉半径内，且格子一定可走
 	_check(e.is_chasing(), "听觉半径内：开始追", "在听觉半径内没有追击")
 	_reset_enemy(e)
 
@@ -229,7 +248,7 @@ func _move_near_enemy() -> void:
 		return
 	var e: Node2D = _enemies[0]
 	# 站到同一格边缘：看得见敌人，又不触发 20 px 的接触判定
-	_player.global_position = e.global_position + Vector2(30, 0)
+	_player.global_position = e.global_position + Vector2(52, 0)
 	if _cam != null:
 		_cam.reset_smoothing()
 
@@ -277,7 +296,7 @@ func _report() -> void:
 	var lines := PackedStringArray()
 	lines.append("Echo selfcheck  %s" % Time.get_datetime_string_from_system())
 	lines.append("波前 _compute_ring   %.0f µs/帧（221 条射线，最多 5 次反射）" % _ring_us)
-	lines.append("边界记忆 _decay_edges %.0f µs/次（每 4 帧一次，122×68 像素）" % _decay_us)
+	lines.append("边界记忆 _decay_edges %.0f µs/次（每 4 帧一次，%d×%d 像素）" % [_decay_us, _map_w * 2, _map_h * 2])
 	lines.append("敌人出生格           %s" % _spawn_text)
 	lines.append("最短路 %d 步；路径上离敌人最近 %d 格" % [_route_len, _route_min])
 	if _fails.is_empty():

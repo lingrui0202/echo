@@ -28,6 +28,11 @@ const EDGE_DECAY := 0.97      # 每 4 帧衰减一次（约 6–7 秒退完）
 
 var _t := -1.0
 var _origin := Vector2.ZERO
+var _speed := RING_SPEED
+var _dur := DURATION
+var _bounces := MAX_BOUNCES
+var _strong := false
+var _palette := 0          # 0 标准青 / 1 高对比白
 var _layer: CanvasLayer
 var _drawer: Node2D
 
@@ -85,7 +90,30 @@ func setup(map_rows: Array, cell_px: float) -> void:
 	_layer.add_child(_drawer)
 
 
-func emit_at(world_pos: Vector2) -> void:
+## strong = 强声呐：圈更大更远、多一次反射、颜色偏橙；代价会由关卡那边让全场敌人听见。
+func set_palette(p: int) -> void:
+	_palette = p
+	if _drawer != null:
+		_drawer.queue_redraw()
+
+
+## 换关时清空墙上的记忆，否则上一张图的轮廓会留在新图上
+func clear_memory() -> void:
+	if _edge_img != null:
+		_edge_img.fill(Color(0, 0, 0, 0))
+		_edge_tex.update(_edge_img)
+	_t = -1.0
+	_pts.clear()
+	_energies.clear()
+	if _drawer != null:
+		_drawer.queue_redraw()
+
+
+func emit_at(world_pos: Vector2, strong: bool = false) -> void:
+	_strong = strong
+	_speed = RING_SPEED * (1.45 if strong else 1.0)
+	_dur = DURATION * (1.25 if strong else 1.0)
+	_bounces = MAX_BOUNCES + (1 if strong else 0)
 	_origin = world_pos
 	_t = 0.0
 	_pts.clear()
@@ -107,7 +135,7 @@ func _process(delta: float) -> void:
 		return
 	_t += delta
 
-	if _t > DURATION:
+	if _t > _dur:
 		_t = -1.0
 		_pts.clear()
 		_energies.clear()
@@ -125,7 +153,7 @@ func trace_ray(dir: Vector2, distance: float, space: PhysicsDirectSpaceState2D) 
 	var energy := 1.0
 	var hits := 0
 	var d := dir
-	for _b in MAX_BOUNCES + 1:
+	for _b in _bounces + 1:
 		if remaining <= 0.5:
 			break
 		var target := pos + d * remaining
@@ -144,7 +172,7 @@ func trace_ray(dir: Vector2, distance: float, space: PhysicsDirectSpaceState2D) 
 
 
 func _compute_ring() -> void:
-	var r := maxf(MIN_RADIUS, RING_SPEED * _t)
+	var r := maxf(MIN_RADIUS, _speed * _t)
 	var space := get_world_2d().direct_space_state
 	_pts.clear()
 	_energies.clear()
@@ -171,7 +199,10 @@ func _stamp_edge(world_pos: Vector2, energy: float) -> void:
 	var want := clampf(EDGE_ALPHA * energy, 0.0, 1.0)
 	if c.a >= want:
 		return
-	_edge_img.set_pixel(x, y, Color(0.38, 0.62, 0.85, want))
+	var ec := Color(0.95, 0.66, 0.35) if _strong else Color(0.38, 0.62, 0.85)
+	if _palette == 1:
+		ec = Color(0.95, 0.9, 0.8) if not _strong else Color(0.95, 0.8, 0.55)
+	_edge_img.set_pixel(x, y, Color(ec.r, ec.g, ec.b, want))
 	_edge_dirty = true
 
 
@@ -192,7 +223,7 @@ func _decay_edges() -> void:
 func draw_ring(d: CanvasItem) -> void:
 	if _t < 0.0 or _pts.size() < 2:
 		return
-	var k := clampf(_t / DURATION, 0.0, 1.0)
+	var k := clampf(_t / _dur, 0.0, 1.0)
 	var fade := pow(1.0 - k, 0.7)
 
 	var prev := Vector2.ZERO
@@ -203,10 +234,13 @@ func draw_ring(d: CanvasItem) -> void:
 		var energy := _energies[i]
 		var alpha := fade * 0.9 * energy
 
+		var col := Color(1.0, 0.78, 0.42) if _strong else Color(0.55, 0.88, 1.0)
+		if _palette == 1:
+			col = Color(1.0, 1.0, 1.0) if not _strong else Color(1.0, 0.9, 0.6)
 		if prev_ok and absf(energy - prev_energy) < 0.35 and prev.distance_to(pt) <= MAX_JOIN_PX:
-			d.draw_line(prev, pt, Color(0.55, 0.88, 1.0, alpha), 5.0)
+			d.draw_line(prev, pt, Color(col.r, col.g, col.b, alpha), 5.0)
 		else:
-			d.draw_circle(pt, 3.0, Color(0.65, 0.92, 1.0, alpha))
+			d.draw_circle(pt, 3.0, Color(col.r, col.g, col.b, alpha))
 
 		prev = pt
 		prev_energy = energy

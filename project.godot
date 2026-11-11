@@ -12,13 +12,18 @@ config_version=5
 
 config/name="Echo Location"
 config/description="靠声呐脉冲在黑暗中探路的小游戏"
-run/main_scene="res://scenes/Level01.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.7")
 
 [autoload]
 
 Boot="*res://autoload/boot.gd"
 GameLog="*res://autoload/game_log.gd"
+Progress="*res://autoload/progress.gd"
+Sfx="*res://autoload/sfx.gd"
+Settings="*res://autoload/settings.gd"
+Mods="*res://autoload/mods.gd"
+Session="*res://autoload/session.gd"
 
 [display]
 

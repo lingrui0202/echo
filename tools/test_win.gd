@@ -12,6 +12,13 @@ var _frames := 0
 var _player: Node2D = null
 
 func _initialize() -> void:
+	_quiet()
+
+func _quiet() -> void:
+	var gl := root.get_node_or_null("GameLog")
+	if gl != null:
+		gl.set("persist", false)
+		gl.set("mode_tag", "tool")
 	root.size = Vector2i(1152, 648)
 	var ps: PackedScene = load("res://scenes/Level01.tscn")
 	root.add_child(ps.instantiate())
