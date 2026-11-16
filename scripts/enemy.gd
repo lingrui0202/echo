@@ -32,6 +32,10 @@ const KIND_BLIND := 1
 const KIND_SHARP := 2
 const KIND_NAMES := ["普通", "瞎子", "敏锐"]
 
+const SEARCH_TIME := 7.0        # 追丢后在最后位置附近搜多久
+const SEARCH_STEP := 1.6        # 多久换一个搜索点
+const SEARCH_RADIUS := 5        # 搜索点离最后位置几格内
+
 const PATROL_SPEED := 58.0      # 巡逻比追击慢，玩家能听出来它是不是在追
 const PATROL_PERIOD := 4.0      # 每隔多久挑一个新点
 const PATROL_RADIUS := 7        # 在出生点附近几格里晃
@@ -50,6 +54,10 @@ var _glow: PointLight2D = null
 var _pulse := 0.0
 
 var _lost := 0.0
+var _search_left := 0.0
+var _search_step := 0.0
+var _last_known := Vector2i.ZERO
+var _searching := false
 var _patrol_left := 1.0
 var _patrol_path: Array = []
 var _rng := RandomNumberGenerator.new()
@@ -137,6 +145,9 @@ func _start_chase(world_pos: Vector2) -> bool:
 func is_chasing() -> bool:
 	return _has_target
 
+func is_searching() -> bool:
+	return _searching
+
 func _physics_process(delta: float) -> void:
 	if _player == null:
 		_player = get_tree().get_first_node_in_group("player")
@@ -144,10 +155,13 @@ func _physics_process(delta: float) -> void:
 	if _has_target:
 		_chase_left -= delta
 		if _chase_left <= 0.0:
-			# 追丢了：忘掉声源，继续巡逻
+			# 追丢了：先去最后听到的地方搜一圈，再回去巡逻
 			_has_target = false
 			_path.clear()
-			_patrol_left = 0.0
+			_last_known = _target
+			_searching = true
+			_search_left = SEARCH_TIME
+			_search_step = 0.0
 			queue_redraw()
 		# 追的是「实时位置」，不是发声那一刻的旧坐标：
 		# 以前 _target 只在 hear() 里写一次，玩家一走它就到旧点干站着。
@@ -159,7 +173,11 @@ func _physics_process(delta: float) -> void:
 				_lost += delta
 				if _lost > LOSE_TIME:
 					_has_target = false
+					_last_known = _target
 					_path.clear()
+					_searching = true
+					_search_left = SEARCH_TIME
+					_search_step = 0.0
 					_lost = 0.0
 					queue_redraw()
 			else:
@@ -170,10 +188,37 @@ func _physics_process(delta: float) -> void:
 			_repath = REPATH
 			_path = Maze.path(_rows, cell_of(global_position), _target)
 		_move_along(_path, move_speed())
+	elif _searching:
+		_search(delta)
 	else:
 		_patrol(delta)
 
 	_check_catch()
+
+## 搜索：在最后听到的位置附近来回找，找不到就放弃
+func _search(delta: float) -> void:
+	_search_left -= delta
+	if _search_left <= 0.0:
+		_searching = false
+		_path.clear()
+		_patrol_left = 0.0
+		queue_redraw()
+		return
+
+	_search_step -= delta
+	if _search_step <= 0.0 or _path.is_empty():
+		_search_step = SEARCH_STEP
+		var here := cell_of(global_position)
+		for _try in 6:
+			var c := _last_known + Vector2i(
+				_rng.randi_range(-SEARCH_RADIUS, SEARCH_RADIUS),
+				_rng.randi_range(-SEARCH_RADIUS, SEARCH_RADIUS))
+			if not Maze.is_open(_rows, c) or c == here:
+				continue
+			_path = Maze.path(_rows, here, c)
+			break
+	_move_along(_path, PATROL_SPEED * 1.25)
+
 
 ## 巡逻：每隔一段时间在出生点附近挑一个空地走过去，走到就停。
 func _patrol(delta: float) -> void:
@@ -226,5 +271,8 @@ func _draw() -> void:
 		base = Color(0.85, 0.55, 0.15, 0.75)
 		hot = Color(1.0, 0.75, 0.25, 0.95)
 	var ring := hot if _has_target else base
+	if _searching and not _has_target:
+		ring = Color(1.0, 0.85, 0.35, 0.9)
+		base = Color(0.85, 0.72, 0.30, 0.75)
 	draw_circle(Vector2.ZERO, 11.0, Color(0.22, 0.05, 0.05, 0.9))
 	draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 24, ring, 2.0, true)

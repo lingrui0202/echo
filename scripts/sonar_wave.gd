@@ -109,10 +109,14 @@ func clear_memory() -> void:
 		_drawer.queue_redraw()
 
 
-func emit_at(world_pos: Vector2, strong: bool = false) -> void:
+func emit_at(world_pos: Vector2, strong: bool = false, suppressed: bool = false) -> void:
 	_strong = strong
 	_speed = RING_SPEED * (1.45 if strong else 1.0)
 	_dur = DURATION * (1.25 if strong else 1.0)
+	if suppressed:
+		# 静音区里回声只走得动一点点，也传不出去
+		_speed *= 0.45
+		_dur *= 0.6
 	_bounces = MAX_BOUNCES + (1 if strong else 0)
 	_origin = world_pos
 	_t = 0.0

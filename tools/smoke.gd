@@ -85,6 +85,18 @@ func _process(_delta: float) -> bool:
 		Input.action_release(_release_action)
 		_release_action = &""
 
+	if _at(50, "force_level"):
+		# Progress 的 _ready 会在我们之后才跑（会读存档里的关卡），所以这里强制回到第 1 关
+		var prog := root.get_node_or_null("Progress")
+		if prog != null:
+			prog.set("level_index", 0)
+		var mods := root.get_node_or_null("Mods")
+		if mods != null:
+			mods.set("pending", false)
+		var lv := root.get_node_or_null("Level01")
+		if lv != null:
+			lv.call("restart", 0)
+
 	if _at(100, "find"):
 		_player = root.get_node_or_null("Level01/Player")
 		if _player == null:

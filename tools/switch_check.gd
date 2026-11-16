@@ -134,6 +134,20 @@ func _ready() -> void:
 		"按 5 之后地图确实换成第 2 关（宽 %d）" % String(rows_after[0]).length(),
 		"地图还是旧的：宽 %d" % String(rows_after[0]).length())
 
+	# 换关后 HUD 的浮动面板不能留着
+	var hud4: Node = _lv.get_node("HUD")
+	for key in ["_result", "_settings", "_codex_panel"]:
+		var panel: Control = hud4.get(key)
+		if panel != null:
+			_check(not panel.visible, "换关后 %s 不残留" % key, "换关后 %s 还开着" % key)
+	# 词条面板该跟着 Mods.pending 走（正式模式要选词条时本来就该显示）
+	var pick: Control = hud4.get("_pick")
+	var mods := get_node_or_null("/root/Mods")
+	if pick != null and mods != null:
+		await get_tree().process_frame
+		_check(pick.visible == bool(mods.get("pending")), "词条面板与 pending 一致",
+			"词条面板状态不对：visible=%s pending=%s" % [str(pick.visible), str(mods.get("pending"))])
+
 	prog.set("persist", true)
 	print("---- %d 项通过，%d 项失败" % [_pass, _fails.size()])
 	get_tree().quit(0 if _fails.is_empty() else 1)

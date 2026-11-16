@@ -19,6 +19,10 @@ func _ready() -> void:
 	_bind("slot_7", [KEY_7])
 	_bind("slot_8", [KEY_8])
 	_bind("slot_9", [KEY_9])
+	_bind("slot_0", [KEY_0])
+	_bind("codex", [KEY_C])
+	_bind("page_prev", [KEY_LEFT])
+	_bind("page_next", [KEY_RIGHT])
 	_bind("restart", [KEY_R])
 	_bind("stats", [KEY_TAB])
 

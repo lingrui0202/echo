@@ -15,6 +15,10 @@ func _ready() -> void:
 	_add("win", _tone(660.0, 0.45, 0.4, 990.0))
 	# 心跳：低频、很短，靠间隔表达"还有多远"
 	_add("heart", _tone(58.0, 0.15, 0.55, 42.0))
+	_add("frag", _tone(1046.0, 0.30, 0.35, 1568.0))
+	_add("step", _tone(180.0, 0.07, 0.18, 120.0))
+	_add("hit", _tone(90.0, 0.35, 0.55, 55.0))
+	_add("ambient", _loop_tone(46.0, 3.0, 0.10))
 
 func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> AudioStreamWAV:
 	var n := int(RATE * dur)
@@ -32,6 +36,15 @@ func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> Audio
 	w.stereo = false
 	w.data = data
 	return w
+
+## 循环低频环境音
+func _loop_tone(freq: float, dur: float, amp: float) -> AudioStreamWAV:
+	var w := _tone(freq, dur, amp)
+	w.loop_mode = AudioStreamWAV.LOOP_FORWARD
+	w.loop_begin = 0
+	w.loop_end = int(RATE * dur)
+	return w
+
 
 func _add(name: String, stream: AudioStreamWAV) -> void:
 	var p := AudioStreamPlayer.new()
@@ -60,3 +73,15 @@ func win() -> void:
 
 func heart() -> void:
 	play("heart")
+
+func step() -> void:
+	play("step")
+
+func hit() -> void:
+	play("hit")
+
+func start_ambient() -> void:
+	var p: AudioStreamPlayer = _players.get("ambient")
+	if p != null and not p.playing:
+		p.volume_db = -20.0
+		p.play()

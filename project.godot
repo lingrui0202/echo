@@ -24,6 +24,9 @@ Sfx="*res://autoload/sfx.gd"
 Settings="*res://autoload/settings.gd"
 Mods="*res://autoload/mods.gd"
 Session="*res://autoload/session.gd"
+Achv="*res://autoload/achv.gd"
+Tutorial="*res://autoload/tutorial.gd"
+Codex="*res://autoload/codex.gd"
 
 [display]
 

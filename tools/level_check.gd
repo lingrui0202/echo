@@ -21,6 +21,10 @@ func _ready() -> void:
 	_check_progress()
 	await _check_strong_sonar()
 	await _check_strong_key()
+	await _check_fragments()
+	await _check_enemy_search()
+	await _check_key_hint()
+	await _check_plate_and_silence()
 	await _check_crates()
 	_check_mods()
 	_check_settings()
@@ -38,7 +42,7 @@ func _check_levels() -> void:
 	_check(prog != null, "Progress 已注册", "缺少 Progress autoload")
 	if prog == null:
 		return
-	_check(Levels.MAPS.size() == 5, "关卡数 = 5", "关卡数不是 5：%d" % Levels.MAPS.size())
+	_check(Levels.MAPS.size() == 10, "关卡数 = 10", "关卡数不对：%d" % Levels.MAPS.size())
 
 	for i in Levels.MAPS.size():
 		prog.set("level_index", i)
@@ -47,7 +51,8 @@ func _check_levels() -> void:
 		add_child(lv)
 		await get_tree().process_frame
 
-		var rows: Array = lv.map_rows()
+		# 原始地图（门是 'D' 可通行）：门关着时 lv.map_rows() 里是 '#'，不能拿来判可达
+		var rows: Array = Levels.MAPS[i]
 		var w := String(rows[0]).length()
 		var h := rows.size()
 		_check(w > 20 and h > 15, "第 %d 关地图 %d×%d" % [i + 1, w, h], "第 %d 关地图尺寸异常" % (i + 1))
@@ -64,6 +69,26 @@ func _check_levels() -> void:
 		var dist: Dictionary = load("res://scripts/maze.gd").distances(rows, start)
 		_check(dist.has(goal), "第 %d 关出口可达（%d 步）" % [i + 1, int(dist.get(goal, 0))],
 			"第 %d 关出口不可达" % (i + 1))
+
+		var raw_doors := 0
+		for r in rows:
+			raw_doors += String(r).count("D")
+		if raw_doors > 0:
+			var opened: Dictionary = load("res://scripts/maze.gd").distances(rows, start)
+			var keys_ok := false
+			for c in opened.keys():
+				if String(rows[c.y])[c.x] == "K":
+					keys_ok = true
+					break
+			_check(keys_ok, "第 %d 关门 %d 格、有钥匙" % [i + 1, raw_doors],
+				"第 %d 关有门但没有钥匙" % (i + 1))
+
+		# 箱子不能压在钥匙/碎片/压力板/门上
+		var reserved_ok := true
+		for cc in lv.call("crate_cells"):
+			if lv.call("_cell_reserved", cc):
+				reserved_ok = false
+		_check(reserved_ok, "第 %d 关箱子没压住机关" % (i + 1), "第 %d 关箱子压住了机关" % (i + 1))
 
 		var box: Node = lv.get_node_or_null("Enemies")
 		var cnt := box.get_child_count() if box != null else 0
@@ -87,11 +112,11 @@ func _check_progress() -> void:
 		return
 	prog.call("reset")
 	var seq: Array = []
-	for i in 5:
+	for i in Progress.TOTAL:
 		var more: bool = prog.call("advance")
 		var tag := "有下一关" if more else "最后一关"
 		seq.append(str(int(prog.get("level_index"))) + ":" + tag)
-	_check(int(prog.get("level_index")) == 4, "连推 5 次停在第 5 关",
+	_check(int(prog.get("level_index")) == Progress.TOTAL - 1, "连推到最后一关",
 		"进度推进不对：%s" % str(seq))
 	prog.call("reset")
 	_check(int(prog.get("level_index")) == 0, "reset 回到第 1 关", "reset 没回到第 1 关")
@@ -162,6 +187,180 @@ func _check_strong_key() -> void:
 
 
 ## 箱子：第 3 关应该生成 2 个；能推动一格；推到墙上推不动
+## 碎片：每关有、能捡、捡完永久记在存档里、每 3 枚一档升级
+## 压力板开门 / 静音区免疫警报
+func _check_plate_and_silence() -> void:
+	var prog := get_node_or_null("/root/Progress")
+	var ps: PackedScene = load("res://scenes/Level01.tscn")
+
+	# 压力板：踩上去，它连的那扇门必须开
+	prog.set("level_index", 3)
+	var lv: Node = ps.instantiate()
+	add_child(lv)
+	await get_tree().process_frame
+	var plates: Array = lv.call("plate_cells")
+	if plates.is_empty():
+		_check(false, "第 4 关有压力板", "第 4 关没有压力板")
+	else:
+		var link: Dictionary = lv.get("_plate_door")
+		var pcell: Vector2i = plates[0]
+		var door: Vector2i = link.get(pcell, Vector2i(-1, -1))
+		var player: Node2D = lv.get_node("Player")
+		player.global_position = Vector2(pcell.x * 64 + 32, pcell.y * 64 + 32)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		_check(door.x >= 0 and not bool(lv.call("is_door_closed", door)),
+			"踩压力板后门开了", "踩了压力板门没开")
+	lv.queue_free()
+	await get_tree().process_frame
+
+	# 静音区：在里面发声，敌人不该被惊动
+	prog.set("level_index", 2)
+	var lv2: Node = ps.instantiate()
+	add_child(lv2)
+	await get_tree().process_frame
+	var sil: Array = lv2.call("silence_cells")
+	if sil.is_empty():
+		_check(false, "第 3 关有静音区", "第 3 关没有静音区")
+	else:
+		var gl := get_node_or_null("/root/GameLog")
+		var before := 0
+		if gl != null:
+			before = int(gl.get("alert_count"))
+			gl.set("alert_count", 0)
+		var sc: Vector2i = sil[0]
+		lv2.call("emit_wave", Vector2(sc.x * 64 + 32, sc.y * 64 + 32), false)
+		await get_tree().process_frame
+		var after := int(gl.get("alert_count")) if gl != null else 0
+		_check(after == 0, "静音区里发声不惊动敌人", "静音区里还是惊动了 %d 个" % after)
+		if gl != null:
+			gl.set("alert_count", before)
+	lv2.queue_free()
+	await get_tree().process_frame
+
+
+## 碰到门之后，小地图才会标出钥匙
+func _check_key_hint() -> void:
+	var prog := get_node_or_null("/root/Progress")
+	prog.set("level_index", 1)                 # 第 2 关：门 + 钥匙
+	var ps: PackedScene = load("res://scenes/Level01.tscn")
+	var lv: Node = ps.instantiate()
+	add_child(lv)
+	await get_tree().process_frame
+	var doors: Array = lv.call("door_cells")
+	if doors.is_empty():
+		_check(false, "第 2 关有门（钥匙提示前提）", "第 2 关没有门")
+		lv.queue_free()
+		return
+
+	_check(not bool(lv.call("keys_revealed")), "还没碰门时不显示钥匙", "一开始就显示了钥匙")
+
+	var d: Vector2i = doors[0]
+	var player: Node2D = lv.get_node("Player")
+	player.global_position = Vector2(d.x * 64 + 32, d.y * 64 + 32)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_check(bool(lv.call("keys_revealed")), "碰到门之后开始显示钥匙", "碰了门也没有提示")
+
+	var hud: Node = lv.get_node("HUD")
+	var mm: Control = hud.get("_minimap")
+	var keys: Array = mm.get("_keys")
+	_check(keys.size() > 0, "小地图拿到钥匙位置（%d 个）" % keys.size(), "小地图没拿到钥匙")
+
+	await get_tree().process_frame
+	get_viewport().get_texture().get_image().save_png("res://_verify/key_hint.png")
+	print("[shot] _verify/key_hint.png")
+
+	lv.queue_free()
+	await get_tree().process_frame
+
+
+## 敌人追丢后应该先搜索，而不是立刻回去巡逻
+func _check_enemy_search() -> void:
+	var prog := get_node_or_null("/root/Progress")
+	prog.set("level_index", 3)          # 第 4 关有 2 个敌人
+	var ps: PackedScene = load("res://scenes/Level01.tscn")
+	var lv: Node = ps.instantiate()
+	add_child(lv)
+	await get_tree().process_frame
+	var box: Node = lv.get_node_or_null("Enemies")
+	if box == null or box.get_child_count() == 0:
+		_check(false, "第 4 关有敌人（搜索测试前提）", "没有敌人")
+		lv.queue_free()
+		return
+	var e: Node = box.get_child(0)
+	e.call("hear_any", e.global_position)
+	_check(bool(e.call("is_chasing")), "敌人进入追击", "没进入追击")
+	e.set("_chase_left", 0.01)
+	e.call("_physics_process", 0.02)
+	_check(bool(e.call("is_searching")), "追丢后进入搜索状态", "追丢后直接回去巡逻了")
+
+	lv.queue_free()
+	await get_tree().process_frame
+
+
+func _check_fragments() -> void:
+	var prog := get_node_or_null("/root/Progress")
+	prog.set("persist", false)
+	prog.set("level_index", 1)
+	var ps: PackedScene = load("res://scenes/Level01.tscn")
+	var lv: Node = ps.instantiate()
+	add_child(lv)
+	await get_tree().process_frame
+
+	var cells: Array = lv.call("fragment_cells")
+	_check(cells.size() > 0, "第 2 关生成了 %d 枚碎片" % cells.size(), "没有生成碎片")
+
+	var before := int(prog.get("fragments"))
+	if cells.size() > 0:
+		lv.call("_collect_fragment", cells[0])
+		await get_tree().process_frame
+		_check(int(prog.get("fragments")) == before + 1, "捡到碎片后总数 +1", "碎片没记进存档")
+		_check(lv.call("fragment_cells").size() == cells.size() - 1, "捡过的碎片消失", "碎片还在")
+		_check(int(GameLog.get("fragment_count")) >= 1, "遥测记了碎片", "遥测没记碎片")
+
+	# 同一存档再进这关，捡过的不会再出现
+	lv.queue_free()
+	await get_tree().process_frame
+	var lv2: Node = ps.instantiate()
+	add_child(lv2)
+	await get_tree().process_frame
+	_check(lv2.call("fragment_cells").size() == maxi(cells.size() - 1, 0),
+		"捡过的碎片不会重生", "碎片重生了")
+	lv2.queue_free()
+	await get_tree().process_frame
+
+	# 碎片必须刷在能走到的格子上，并且 HUD 文案写清「剩 X/3」
+	var lv3: Node = ps.instantiate()
+	add_child(lv3)
+	await get_tree().process_frame
+	var raw3: Array = Levels.MAPS[lv3.level_index]
+	var dist3: Dictionary = load("res://scripts/maze.gd").distances(raw3, lv3.start_cell())
+	var all_reach := true
+	for c3 in lv3.call("fragment_cells"):
+		if not dist3.has(c3):
+			all_reach = false
+	_check(all_reach, "碎片都刷在可达格上", "有碎片刷在走不到的地方")
+	var hud3: Node = lv3.get_node("HUD")
+	await get_tree().process_frame
+	var hint: Label = hud3.get("_hint")
+	_check(String(hint.text).contains("碎片 剩"), "HUD 写明「碎片 剩 X/3」",
+		"HUD 碎片文案不清楚：%s" % String(hint.text).left(60))
+	lv3.queue_free()
+	await get_tree().process_frame
+
+	# 升级档位
+	prog.set("fragments", 0)
+	_check(prog.call("upgrade_tier") == 0 and is_equal_approx(float(prog.call("cooldown_bonus")), 0.0),
+		"0 碎片没有加成", "0 碎片就有加成")
+	prog.set("fragments", 9)
+	_check(prog.call("upgrade_tier") == 3, "9 碎片到第 3 档", "升级档位不对")
+	_check(float(prog.call("cooldown_bonus")) > 0.4 and int(prog.call("light_bonus")) > 10,
+		"第 3 档有冷却与光圈加成", "第 3 档没加成")
+	prog.set("fragments", 0)
+	prog.set("persist", true)
+
+
 func _check_crates() -> void:
 	var prog := get_node_or_null("/root/Progress")
 	prog.set("level_index", 2)
@@ -223,6 +422,23 @@ func _check_mods() -> void:
 	_check(not bool(mods.get("pending")), "选完不再卡住", "选完还在 pending")
 	_check(mods.call("sonar_mul") > 0.0 and mods.call("sonar_mul") <= 1.0,
 		"词条对声呐冷却有倍率（%.2f）" % float(mods.call("sonar_mul")), "词条倍率不对")
+	# 五个词条都要真的产生效果
+	var expect := {
+		"quick": ["sonar_mul", 0.8],
+		"swift": ["speed_mul", 1.1],
+		"quiet": ["strong_mul", 0.7],
+		"deaf": ["enemy_hear_mul", 0.75],
+		"sharp": ["sonar_mul", 0.65],
+	}
+	for id in expect.keys():
+		mods.set("current", id)
+		var fn: String = expect[id][0]
+		var want: float = expect[id][1]
+		var got: float = float(mods.call(fn))
+		_check(is_equal_approx(got, want), "词条 %s 的 %s = %.2f" % [id, fn, want],
+			"词条 %s 的 %s 不对：%.2f（应 %.2f）" % [id, fn, got, want])
+	mods.set("current", "")
+
 	mods.call("reset_for_level", 0)
 	_check(not bool(mods.get("pending")), "第 1 关不用选词条", "第 1 关也在要求选词条")
 
@@ -298,7 +514,7 @@ func _check_save() -> void:
 		"第 5 关选不了")
 	_check(bool(prog.call("select_level", 3)) and int(prog.get("level_index")) == 3,
 		"选中第 4 关后 level_index = 3", "选关没生效")
-	_check(not bool(prog.call("can_select", 9)), "越界关卡选不了", "越界关卡竟然可选")
+	_check(not bool(prog.call("can_select", Progress.TOTAL)), "越界关卡选不了", "越界关卡竟然可选")
 
 	prog.call("reset")
 	prog.set("persist", true)

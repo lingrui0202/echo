@@ -11,6 +11,10 @@ var tutorial := false
 func is_test() -> bool:
 	return mode == Mode.TEST
 
+func is_daily() -> bool:
+	var gl := get_node_or_null("/root/GameLog")
+	return gl != null and String(gl.get("mode_tag")) == "daily"
+
 func start_campaign(new_game: bool) -> void:
 	mode = Mode.CAMPAIGN
 	Progress.reload()          # 回到磁盘上的真实存档（可能刚从测试模式出来）
@@ -22,6 +26,7 @@ func start_campaign(new_game: bool) -> void:
 		tutorial = true
 	else:
 		tutorial = not Progress.is_cleared(0)
+	Tutorial.begin(new_game)
 	get_tree().call_deferred("change_scene_to_file", "res://scenes/Level01.tscn")
 
 ## 测试：五关全开、没有词条、不碰存档
@@ -33,7 +38,26 @@ func start_test(level_index: int = 0) -> void:
 	GameLog.mode_tag = "test"
 	Progress.level_index = clampi(level_index, 0, Progress.TOTAL - 1)
 	tutorial = false
+	Tutorial.stop()
 	get_tree().call_deferred("change_scene_to_file", "res://scenes/Level01.tscn")
+
+## 每日挑战：按日期选一关，每天同一关，成绩单独记（mode=daily）
+func start_daily() -> void:
+	mode = Mode.CAMPAIGN
+	Progress.reload()
+	Progress.persist = false      # 每日挑战不写正式存档（只记 runs.json）
+	GameLog.persist = true
+	GameLog.mode_tag = "daily"
+	tutorial = false
+	Tutorial.stop()
+	var d := Time.get_datetime_dict_from_system()
+	Progress.level_index = int(d["day"]) % Progress.TOTAL
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/Level01.tscn")
+
+func daily_level() -> int:
+	var d := Time.get_datetime_dict_from_system()
+	return int(d["day"]) % Progress.TOTAL
+
 
 func quit_to_menu() -> void:
 	Progress.save_now()              # 回首页前先落盘

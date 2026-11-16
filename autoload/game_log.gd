@@ -1,4 +1,7 @@
 extends Node
+
+## 每局结束发一条（成就系统听这个）
+signal run_finished(rec)
 ## 遥测：每局自动记一条记录，存到 user://runs.json
 ## 这是整份期末报告的地基 —— 报告的"证据"全部来自这里。
 
@@ -8,6 +11,9 @@ const MAX_RUNS := 200
 const CELL := 64.0
 
 var sonar_count := 0
+var key_count := 0
+var plate_count := 0
+var fragment_count := 0
 var alert_count := 0
 var last_reason := ""
 var _alert_at := -99999.0
@@ -29,10 +35,38 @@ var _cells := {}
 var _runs: Array = []
 
 func _ready() -> void:
+	# 自检跑出来的成绩不能进玩家排行榜
+	if _is_test_run():
+		persist = false
+		mode_tag = "tool"
 	_load()
+	_prune_junk()
+
+## 跑 tools/ 下的场景或 --script 时都算测试
+func _is_test_run() -> bool:
+	for a in OS.get_cmdline_args():
+		if a == "--test" or a.contains("res://tools/"):
+			return true
+	return false
+
+## 清掉历史垃圾：测试写的、以及不可能的时长（< 3 s）
+func _prune_junk() -> void:
+	var kept: Array = []
+	for r in _runs:
+		if String(r.get("mode", "")) in ["tool", "test"]:
+			continue
+		if float(r.get("duration_s", 0.0)) < 3.0:
+			continue
+		kept.append(r)
+	if kept.size() != _runs.size():
+		_runs = kept
+		_save()
 
 func start_session() -> void:
 	sonar_count = 0
+	key_count = 0
+	plate_count = 0
+	fragment_count = 0
 	alert_count = 0
 	_alert_at = -99999.0
 	last_reason = ""
@@ -51,6 +85,16 @@ func elapsed() -> float:
 
 func note_sonar() -> void:
 	sonar_count += 1
+
+## 捡到钥匙（成就与遥测用）
+func note_key() -> void:
+	key_count += 1
+
+func note_plate() -> void:
+	plate_count += 1
+
+func note_fragment() -> void:
+	fragment_count += 1
 
 ## 有东西听见了声呐。count 是这一声惊动的敌人数。
 ## 记时间戳是为了让 HUD 闪一下提示 —— 没有提示的话"被听见"是看不见的。
@@ -91,6 +135,9 @@ func end_session(reason: String) -> void:
 		"reason": reason,
 		"duration_s": snappedf(_frozen, 0.01),
 		"sonar_presses": sonar_count,
+		"keys": key_count,
+		"plates": plate_count,
+		"fragments": fragment_count,
 		"alerts": alert_count,
 		"cells_visited": _cells.size(),
 		"entries": _entries,
@@ -104,6 +151,7 @@ func end_session(reason: String) -> void:
 		_runs = _runs.slice(_runs.size() - MAX_RUNS)
 	_save()
 	print("[GameLog] ", rec)
+	run_finished.emit(rec)
 
 ## 历史最好成绩（只算通关的局），排除最后一条（正在结算的这一局）。
 func best_duration(exclude_last: bool = true) -> float:
@@ -152,8 +200,10 @@ func top_runs(level_idx: int, n: int = 3) -> Array:
 		var cfg: Dictionary = r.get("config", {})
 		if int(cfg.get("level_index", 0)) != level_idx:
 			continue
-		# 只认正式存档的记录；测试/自检跑出来的不算成绩
+		# 只认正式成绩：测试/自检、每日挑战、以及 3 秒以内的假记录都不算
 		if String(r.get("mode", "")) != "campaign":
+			continue
+		if float(r.get("duration_s", 0.0)) < 3.0:
 			continue
 		list.append(r)
 	list.sort_custom(func(a, b): return float(a.get("duration_s", 1e9)) < float(b.get("duration_s", 1e9)))
@@ -162,6 +212,23 @@ func top_runs(level_idx: int, n: int = 3) -> Array:
 
 func history_size() -> int:
 	return _runs.size()
+
+
+## 今天这一关的每日挑战最好成绩
+func today_best(level_idx: int) -> float:
+	var today := Time.get_datetime_string_from_system().substr(0, 10)
+	var best := INF
+	for r in _runs:
+		if String(r.get("mode", "")) != "daily":
+			continue
+		if String(r.get("when", "")).substr(0, 10) != today:
+			continue
+		if int((r.get("config", {}) as Dictionary).get("level_index", -1)) != level_idx:
+			continue
+		if String(r.get("reason", "")) != "win":
+			continue
+		best = minf(best, float(r.get("duration_s", INF)))
+	return best
 
 
 func last_run() -> Dictionary:
@@ -221,6 +288,8 @@ func _load() -> void:
 			_runs = _runs.slice(_runs.size() - MAX_RUNS)
 
 func _save() -> void:
+	if _is_test_run():
+		return
 	if not persist:
 		return
 	var f := FileAccess.open(SAVE_PATH, FileAccess.WRITE)

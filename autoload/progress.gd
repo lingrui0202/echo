@@ -4,7 +4,7 @@ extends Node
 ##
 ## 兼容旧接口：can_select / select_level / record_clear / best_time / is_cleared / advance / reset。
 
-const TOTAL := 5
+const TOTAL := 10
 const DIR := "user://saves"
 const LEGACY := "user://progress.json"
 
@@ -14,13 +14,30 @@ var cleared := {}
 var persist := true
 
 var save_dir := DIR
+var fragments := 0            # 总碎片数（永久）
+var achv: Array = []          # 已解锁成就 id
+var codex: Array = []         # 已解锁图鉴 id
+var total_runs := 0
+var total_wins := 0
+var total_sonar := 0
+var total_alerts := 0
+var taken := {}               # 关卡 -> ["x,y", ...] 已经拿过的碎片
 var slot_id := ""
 var created_at := 0.0
 var updated_at := 0.0
 
 func _ready() -> void:
+	if _should_use_test_dir():
+		save_dir = "user://saves_test"      # 自检绝不碰玩家存档
 	DirAccess.make_dir_recursive_absolute(save_dir)
 	_load_last_or_legacy()
+
+## 跑测试时 Godot 会把 res://tools/xxx.tscn 或 --script 的路径放进命令行参数
+func _should_use_test_dir() -> bool:
+	for a in OS.get_cmdline_args():
+		if a == "--test" or a.contains("res://tools/"):
+			return true
+	return false
 
 # ---------------- 槽位 ----------------
 
@@ -31,6 +48,14 @@ func new_save() -> void:
 	unlocked = 0
 	level_index = 0
 	cleared = {}
+	fragments = 0
+	taken = {}
+	achv = []
+	codex = []
+	total_runs = 0
+	total_wins = 0
+	total_sonar = 0
+	total_alerts = 0
 	save_now()
 
 ## 保存当前槽（时间戳也刷新）
@@ -47,6 +72,14 @@ func save_now() -> void:
 			"unlocked": unlocked,
 			"level_index": level_index,
 			"cleared": cleared,
+			"fragments": fragments,
+			"taken": taken,
+			"achv": achv,
+			"codex": codex,
+			"total_runs": total_runs,
+			"total_wins": total_wins,
+			"total_sonar": total_sonar,
+			"total_alerts": total_alerts,
 		}))
 
 ## 所有槽位，按最后保存时间倒序：[{id, updated, level, cleared_count, finished}]
@@ -78,6 +111,27 @@ func list_saves() -> Array:
 		return String(a["id"]) > String(b["id"]))   # 同一毫秒内按 id 兜底
 	return out
 
+## 删掉一个槽；删的是当前槽就清空当前状态
+func delete_save(id: String) -> bool:
+	if not FileAccess.file_exists(_path(id)):
+		return false
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(_path(id)))
+	if id == slot_id:
+		slot_id = ""
+		level_index = 0
+		unlocked = 0
+		cleared = {}
+		fragments = 0
+		taken = {}
+		codex = []
+		achv = []
+		total_runs = 0
+		total_wins = 0
+		total_sonar = 0
+		total_alerts = 0
+	return true
+
+
 func load_save(id: String) -> bool:
 	var d := _read(_path(id))
 	if d.is_empty():
@@ -86,6 +140,18 @@ func load_save(id: String) -> bool:
 	created_at = float(d.get("created", 0.0))
 	updated_at = float(d.get("updated", 0.0))
 	unlocked = clampi(int(d.get("unlocked", 0)), 0, TOTAL - 1)
+	fragments = int(d.get("fragments", 0))
+	achv = d.get("achv", []) if typeof(d.get("achv", [])) == TYPE_ARRAY else []
+	codex = d.get("codex", []) if typeof(d.get("codex", [])) == TYPE_ARRAY else []
+	total_runs = int(d.get("total_runs", 0))
+	total_wins = int(d.get("total_wins", 0))
+	total_sonar = int(d.get("total_sonar", 0))
+	total_alerts = int(d.get("total_alerts", 0))
+	taken = {}
+	var tk: Variant = d.get("taken", {})
+	if typeof(tk) == TYPE_DICTIONARY:
+		for k in tk.keys():
+			taken[int(k)] = tk[k]
 	level_index = clampi(int(d.get("level_index", 0)), 0, TOTAL - 1)
 	cleared = {}
 	var c: Variant = d.get("cleared", {})
@@ -97,9 +163,64 @@ func load_save(id: String) -> bool:
 	return true
 
 ## 同一秒里连开两个存档也不能撞 id
-func _next_id() -> String:
-	return "save_%d_%03d" % [int(Time.get_unix_time_from_system()), Time.get_ticks_usec() % 1000]
+var _seq := 0
 
+func _next_id() -> String:
+	_seq += 1
+	return "save_%d_%03d" % [int(Time.get_unix_time_from_system()), _seq]
+
+
+## 这一关还有哪几枚碎片没拿
+func is_fragment_taken(level_idx: int, key: String) -> bool:
+	var arr: Variant = taken.get(level_idx)
+	return arr is Array and arr.has(key)
+
+func has_codex(id: String) -> bool:
+	return codex.has(id)
+
+func unlock_codex(id: String) -> bool:
+	if codex.has(id):
+		return false
+	codex.append(id)
+	save_now()
+	return true
+
+
+func has_achv(id: String) -> bool:
+	return achv.has(id)
+
+func unlock_achv(id: String) -> bool:
+	if achv.has(id):
+		return false
+	achv.append(id)
+	save_now()
+	return true
+
+func fragments_taken(level_idx: int) -> int:
+	var arr: Variant = taken.get(level_idx)
+	return arr.size() if arr is Array else 0
+
+func take_fragment(level_idx: int, key: String) -> bool:
+	if is_fragment_taken(level_idx, key):
+		return false
+	var arr: Array = taken.get(level_idx, [])
+	arr.append(key)
+	taken[level_idx] = arr
+	fragments += 1
+	save_now()
+	return true
+
+## 永久升级：每 3 枚一档
+func upgrade_tier() -> int:
+	return mini(fragments / 3, 3)
+
+## 强声呐冷却倍率（3 枚 -0.15，6 枚 -0.3，9 枚 -0.45）
+func cooldown_bonus() -> float:
+	return [0.0, 0.15, 0.3, 0.45][upgrade_tier()]
+
+## 光圈半径加成（3/6/9 枚 +6/+12/+18 px）
+func light_bonus() -> int:
+	return [0, 6, 12, 18][upgrade_tier()]
 
 func slot_summary() -> String:
 	if slot_id == "":
@@ -207,4 +328,8 @@ func _load_last_or_legacy() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(LEGACY))
 		return
 
-	new_save()
+	# 没有存档也不自动建：否则每跑一次游戏/测试就多一个空槽
+	slot_id = ""
+	level_index = 0
+	unlocked = 0
+	cleared = {}

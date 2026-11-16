@@ -14,6 +14,7 @@ var _visited := {}
 var _player_cell := Vector2i(-1, -1)
 var _goal := Vector2i(-1, -1)
 var _goal_seen := false
+var _keys: Array = []
 var _map_w := 61
 var _map_h := 34
 var _open_total := 1
@@ -31,8 +32,23 @@ func _process(_delta: float) -> void:
 ## 换关时立刻清空（不等下一帧 setup）
 func clear() -> void:
 	_visited.clear()
+	_keys = []
 	_player_cell = Vector2i(-1, -1)
 	_goal_seen = false
+	queue_redraw()
+
+
+## 碰到门之后，把钥匙位置标出来
+func set_keys(cells: Array) -> void:
+	if cells.size() == _keys.size():
+		var same := true
+		for i in cells.size():
+			if cells[i] != _keys[i]:
+				same = false
+				break
+		if same:
+			return
+	_keys = cells.duplicate()
 	queue_redraw()
 
 
@@ -88,6 +104,10 @@ func _draw() -> void:
 		var a := lerpf(0.75, 0.14, age)     # 刚走过的亮，越久越淡
 		draw_rect(Rect2(Vector2(PAD, PAD) + Vector2(c) * CELL_PX, Vector2(CELL_PX, CELL_PX)),
 			Color(0.34, 0.70, 1.0, a))
+
+	for k in _keys:
+		draw_circle(Vector2(PAD, PAD) + (Vector2(Vector2i(k)) + Vector2(0.5, 0.5)) * CELL_PX,
+			2.2, Color(1.0, 0.88, 0.35))
 
 	if _goal_seen:
 		draw_circle(Vector2(PAD, PAD) + (Vector2(_goal) + Vector2(0.5, 0.5)) * CELL_PX,

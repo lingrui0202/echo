@@ -11,6 +11,8 @@ var _panel: PanelContainer
 var _stats: Label
 var _show_stats := false
 
+var _codex_panel: PanelContainer
+var _codex_open := false
 var _settings: PanelContainer
 var _settings_text: Label
 var _settings_open := false
@@ -27,8 +29,30 @@ var _player: Node2D
 var _minimap_ready := false
 
 var _beat_t := 0.0
+var _toast: Label
+var _toast_t := 0.0
+var _flash: ColorRect
+var _flash_t := 0.0
+
+## 所有面板共用的暗色样式（圆角 + 细边 + 内边距）
+func _panel_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.055, 0.075, 0.105, 0.985)
+	sb.border_color = Color(0.32, 0.48, 0.68, 0.9)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(18)
+	return sb
+
 
 func _ready() -> void:
+	var bar := ColorRect.new()
+	bar.color = Color(0.02, 0.03, 0.05, 0.55)
+	bar.position = Vector2(0, 0)
+	bar.size = Vector2(1152, 38)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bar)
+
 	_hint = Label.new()
 	_hint.position = Vector2(16, 10)
 	_hint.add_theme_font_size_override("font_size", 18)
@@ -52,12 +76,17 @@ func _ready() -> void:
 	# 第 1 关的操作提示：只在还没发声呐的前十几秒出现
 	_tutorial = Label.new()
 	_tutorial.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_tutorial.position = Vector2(0, -70)
+	_tutorial.position = Vector2(0, -36)
 	_tutorial.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_tutorial.grow_vertical = Control.GROW_DIRECTION_BEGIN
 	_tutorial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_tutorial.add_theme_font_size_override("font_size", 17)
-	_tutorial.add_theme_color_override("font_color", Color(0.62, 0.78, 0.95))
-	_tutorial.text = "WASD 移动     空格 声呐     E 强声呐     Tab 数据     Esc 设置"
+	_tutorial.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_tutorial.custom_minimum_size = Vector2(640, 0)
+	_tutorial.add_theme_font_size_override("font_size", 20)
+	_tutorial.add_theme_color_override("font_color", Color(0.78, 0.90, 1.0))
+	_tutorial.add_theme_constant_override("outline_size", 6)
+	_tutorial.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.05, 0.95))
+	_tutorial.text = ""
 	_tutorial.visible = false
 	add_child(_tutorial)
 
@@ -79,6 +108,7 @@ func _ready() -> void:
 	_settings_text.add_theme_font_size_override("font_size", 18)
 	_settings_text.add_theme_color_override("font_color", Color(0.82, 0.92, 1.0))
 	_settings_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_settings.add_theme_stylebox_override("panel", _panel_style())
 	_settings.add_child(_settings_text)
 	add_child(_settings)
 
@@ -92,8 +122,50 @@ func _ready() -> void:
 	_pick_text.add_theme_font_size_override("font_size", 19)
 	_pick_text.add_theme_color_override("font_color", Color(0.85, 0.94, 1.0))
 	_pick_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pick.add_theme_stylebox_override("panel", _panel_style())
 	_pick.add_child(_pick_text)
 	add_child(_pick)
+
+	# 图鉴首次遭遇提示（右上角下滑一条）
+	_toast = Label.new()
+	_toast.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_toast.position = Vector2(-460, 46)
+	_toast.custom_minimum_size = Vector2(430, 0)
+	_toast.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_toast.add_theme_font_size_override("font_size", 17)
+	_toast.add_theme_color_override("font_color", Color(0.85, 0.97, 1.0))
+	_toast.add_theme_constant_override("outline_size", 6)
+	_toast.add_theme_color_override("font_outline_color", Color(0.02, 0.03, 0.05, 0.95))
+	_toast.visible = false
+	add_child(_toast)
+	var codex := get_node_or_null("/root/Codex")
+	if codex != null:
+		codex.discovered.connect(_on_discovered)
+
+	# 图鉴（按 C）：和当前存档挂钩，所以放在游戏里而不是首页
+	_codex_panel = PanelContainer.new()
+	_codex_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_codex_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_codex_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	_codex_panel.visible = false
+	_codex_panel.add_theme_stylebox_override("panel", _panel_style())
+	var codex_label := Label.new()
+	codex_label.add_theme_font_size_override("font_size", 15)
+	codex_label.add_theme_color_override("font_color", Color(0.86, 0.93, 1.0))
+	codex_label.custom_minimum_size = Vector2(620, 0)
+	codex_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	codex_label.name = "Body"
+	_codex_panel.add_child(codex_label)
+	add_child(_codex_panel)
+
+	# 受击红闪
+	_flash = ColorRect.new()
+	_flash.color = Color(0.9, 0.15, 0.15, 0.0)
+	_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_flash)
 
 	# 结算面板：一局结束后摆在屏幕中间，把这一局的数说清楚
 	_result = PanelContainer.new()
@@ -105,6 +177,7 @@ func _ready() -> void:
 	_result_text.add_theme_font_size_override("font_size", 20)
 	_result_text.add_theme_color_override("font_color", Color(0.85, 0.96, 1.0))
 	_result_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_result.add_theme_stylebox_override("panel", _panel_style())
 	_result.add_child(_result_text)
 	add_child(_result)
 
@@ -114,17 +187,24 @@ func _process(delta: float) -> void:
 	if not is_inside_tree() or get_tree() == null:
 		return
 	_update_minimap()
-	_update_tutorial()
+	_update_tutorial(delta)
+	_update_toast(delta)
 	_update_heartbeat(delta)
 	_update_settings_panel()
+	_update_codex_panel()
 	_update_pick_panel()
 
 	if Input.is_action_just_pressed("stats"):
 		_show_stats = not _show_stats
 		_panel.visible = _show_stats
 		if _show_stats:
-			_stats.text = GameLog.summary_text() + "\n已探索   %.0f %%   （%d 格）" % [
-				_minimap.explored_ratio() * 100.0, _minimap.visited_count()
+			var lv2 := get_parent()
+			var here_taken := 0
+			if lv2 != null and lv2.has_method("fragments_taken_here"):
+				here_taken = lv2.fragments_taken_here()
+			_stats.text = GameLog.summary_text() + "\n已探索   %.0f %%   （%d 格）\n本关碎片 已拾 %d/3    碎片总数 %d（升级 %d/3）" % [
+				_minimap.explored_ratio() * 100.0, _minimap.visited_count(),
+				here_taken, Progress.fragments, Progress.upgrade_tier()
 			]
 
 	var reason := GameLog.last_reason
@@ -141,6 +221,14 @@ func _process(delta: float) -> void:
 		tail = "    通关！"
 	elif reason == "caught":
 		tail = "    被听见了"
+	if reason == "caught" and _flash_t <= 0.0 and _shown_reason == "caught":
+		_flash_t = 0.5
+	if _flash_t > 0.0:
+		_flash_t = maxf(0.0, _flash_t - 0.016)
+		_flash.color = Color(0.9, 0.15, 0.15, _flash_t * 1.4)
+	else:
+		_flash.color = Color(0.9, 0.15, 0.15, 0.0)
+
 	_alert.visible = GameLog.alert_age() < 1.5 and not ended
 	_alert.text = "！有东西听见了" if _alert.visible else ""
 
@@ -159,9 +247,43 @@ func _process(delta: float) -> void:
 		lvl_no = lvl.level_no()
 		lvl_total = lvl.level_total()
 
-	_hint.text = "第 %d/%d 关   %5.1f s    声呐 %d 次    [空格] 发声呐   %s   [Tab] 数据   [R] 重开%s" % [
-		lvl_no, lvl_total, GameLog.elapsed(), GameLog.sonar_count, strong_hint, tail
+	var frag_txt := ""
+	if lvl != null and lvl.has_method("fragment_cells"):
+		frag_txt = "   碎片 剩 %d/%d" % [lvl.fragment_cells().size(), lvl.fragment_total()]
+	_hint.text = "第 %d/%d 关   %5.1f s   声呐 %d 次%s   [空格] 声呐   %s   [Tab] 数据   [R] 重开%s" % [
+		lvl_no, lvl_total, GameLog.elapsed(), GameLog.sonar_count, frag_txt, strong_hint, tail
 	]
+
+
+## 图鉴：C 开关；只显示当前存档的进度
+func _update_codex_panel() -> void:
+	if Input.is_action_just_pressed("codex"):
+		_codex_open = not _codex_open
+		if _codex_open:
+			_settings_open = false
+			_settings.visible = false
+	_codex_panel.visible = _codex_open
+	if not _codex_open:
+		return
+	var body: Label = _codex_panel.get_node("Body")
+	var codex := get_node_or_null("/root/Codex")
+	if codex == null:
+		body.text = "图鉴不可用"
+		return
+	var lines := "图 鉴（C 关闭）\n"
+	var last_cat := ""
+	for e in codex.call("status"):
+		var cat := String(e["cat"])
+		if cat != last_cat:
+			lines += "\n【%s】\n" % cat
+			last_cat = cat
+		if bool(e["got"]):
+			lines += "  %s —— %s\n" % [String(e["name"]), String(e["desc"])]
+		else:
+			lines += "  ???  还没遇到\n"
+	lines += "\n已解锁 %d / %d（跟着这个存档）" % [
+		codex.call("unlocked_count"), codex.call("status").size()]
+	body.text = lines
 
 
 ## 词条二选一：按 1 / 2 选，选完才允许移动（player 那边会卡住）
@@ -245,12 +367,36 @@ func on_level_changed() -> void:
 	_show_stats = false
 
 
-## 第 1 关、还没发声呐的前 12 秒：把操作提示摆出来
-func _update_tutorial() -> void:
+## 新手引导：由 Tutorial 状态机驱动，只在正式存档的第 1 关出现
+## 图鉴第一次遇到：右上角提示 4 秒
+func _on_discovered(entry: Dictionary) -> void:
+	_toast.text = "新发现 · %s\n%s" % [String(entry.get("name", "")), String(entry.get("desc", ""))]
+	_toast.visible = true
+	_toast_t = 4.5
+
+
+func _update_toast(delta: float) -> void:
+	if _toast_t <= 0.0:
+		_toast.visible = false
+		return
+	_toast_t -= delta
+	if _toast_t <= 0.0:
+		_toast.visible = false
+
+
+func _update_tutorial(delta: float) -> void:
+	if Session.is_test() or not Session.tutorial:
+		Tutorial.stop()
+		_tutorial.visible = false
+		return
 	var lvl := get_parent()
 	var first: bool = lvl != null and lvl.has_method("level_no") and lvl.level_no() == 1
-	_tutorial.visible = Session.tutorial and first and not Session.is_test() \
-		and GameLog.elapsed() < 12.0 and GameLog.sonar_count == 0 and GameLog.last_reason == ""
+	if not first or GameLog.last_reason != "":
+		_tutorial.visible = false
+		return
+	Tutorial.tick(delta, _player, lvl)
+	_tutorial.visible = Tutorial.active
+	_tutorial.text = Tutorial.current_text()
 
 
 ## 心跳：最近的敌人越近，跳得越快。黑暗里这是唯一"不用看"的危险提示。
@@ -280,6 +426,9 @@ func _update_settings_panel() -> void:
 	if Input.is_action_just_pressed("settings"):
 		_settings_open = not _settings_open
 		_settings.visible = _settings_open
+		if _settings_open:
+			_codex_open = false
+			_codex_panel.visible = false
 	if not _settings_open:
 		return
 	if Input.is_action_just_pressed("slot_1"):
@@ -301,7 +450,7 @@ func _update_settings_panel() -> void:
 		_reload_level()
 	elif Input.is_action_just_pressed("slot_7"):
 		Session.quit_to_menu()
-	_settings_text.text = "设  置\n\n%s\n\n[1] 亮度    [2] 音量    [3] 声呐配色\n\n%s\n\n[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n按 Esc 关闭" % [
+	_settings_text.text = "设  置\n\n%s\n\n[1] 亮度    [2] 音量    [3] 声呐配色\n\n%s\n\n[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n[C] 打开图鉴    ·    Esc 关闭" % [
 		Settings.describe(), _save_summary()
 	]
 
@@ -325,6 +474,9 @@ func _update_minimap() -> void:
 	var cell := Vector2i((_player.global_position / 64.0).floor())
 	_minimap.visit(cell)
 	_minimap.set_player(cell)
+	var lvl := get_parent()
+	if lvl != null and lvl.has_method("keys_revealed") and lvl.keys_revealed():
+		_minimap.set_keys(lvl.key_cells())
 
 
 ## 通关 / 被抓共用一套结算，只改标题和颜色。

@@ -16,14 +16,20 @@ const AMBIENT_ENERGY := 0.75
 @onready var sonar := $Sonar
 @onready var ambient: PointLight2D = $AmbientLight
 
+var _step_t := 0.0
+var _shake_t := 0.0
+## 每次重开/换关 +1；结算协程醒来时对不上就放弃推进（否则按 R 后还会自动跳关）
+var _gen := 0
 var _cd := 0.0
 var _cd_strong := 0.0
 var _alive := true
 
 func _ready() -> void:
 	add_to_group("player")
+	Sfx.start_ambient()
 	ambient.texture = LightFactory.ring_texture(AMBIENT_RADIUS * 2, 0.45, 0.82)
 	ambient.energy = AMBIENT_ENERGY * Settings.light_mul()
+	_upgrade_light()
 	ambient.texture_scale = 1.0
 	sonar.setup(LightFactory.radial_texture(256))
 	GameLog.start_session()
@@ -34,8 +40,17 @@ func _ready() -> void:
 	})
 	queue_redraw()
 
+## 永久升级：碎片越多，光圈越大
+func _upgrade_light() -> void:
+	var bonus := Progress.light_bonus()
+	if bonus > 0:
+		ambient.texture = LightFactory.ring_texture((AMBIENT_RADIUS + bonus) * 2, 0.45, 0.82)
+		ambient.texture_scale = 1.0
+
+
 ## 重开/换关：复位状态、重置这一局的遥测
 func reset_state(pos: Vector2) -> void:
+	_gen += 1
 	global_position = pos
 	velocity = Vector2.ZERO
 	_alive = true
@@ -43,6 +58,7 @@ func reset_state(pos: Vector2) -> void:
 	_cd_strong = 0.0
 	# 设置里改了亮度，重开时要重新套到光圈上
 	ambient.energy = AMBIENT_ENERGY * Settings.light_mul()
+	_upgrade_light()
 	GameLog.start_session()
 	GameLog.set_config({
 		"sonar_cooldown": SONAR_COOLDOWN,
@@ -69,15 +85,20 @@ func _physics_process(delta: float) -> void:
 
 	var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
 	if dir != Vector2.ZERO:
+		_step_t -= delta
+		if _step_t <= 0.0:
+			_step_t = 0.42
+			Sfx.step()
 		_try_push(dir)
 	velocity = dir * SPEED * Mods.speed_mul()
 	move_and_slide()
 
 	_cd = maxf(0.0, _cd - delta)
 	if Input.is_action_just_pressed("sonar") and _cd <= 0.0:
-		_cd = SONAR_COOLDOWN * Mods.sonar_mul()
+		_cd = SONAR_COOLDOWN * Mods.sonar_mul() * (1.0 - Progress.cooldown_bonus())
 		sonar.emit()
 		Sfx.ping()
+		_unlock_codex("sonar")
 		var level := get_parent()
 		if level != null and level.has_method("emit_wave"):
 			level.emit_wave(global_position)
@@ -89,19 +110,28 @@ func _physics_process(delta: float) -> void:
 		_cd_strong = STRONG_COOLDOWN * Mods.strong_mul()
 		sonar.emit()
 		Sfx.strong()
+		_unlock_codex("strong")
 		var lv := get_parent()
 		if lv != null and lv.has_method("emit_wave"):
 			lv.emit_wave(global_position, true)
 		GameLog.note_sonar()
 
+	_shake(delta)
 	GameLog.note_position(global_position)
+
+## 图鉴解锁（不存在 Codex 时静默跳过）
+func _unlock_codex(id: String) -> void:
+	var codex := get_node_or_null("/root/Codex")
+	if codex != null:
+		codex.call("unlock", id)
+
 
 func strong_cooldown() -> float:
 	return STRONG_COOLDOWN
 
 ## 给 HUD 用：两个冷却的剩余比例（0 = 好了，1 = 刚按完）
 func cooldown_ratios() -> Vector2:
-	var c1 := maxf(SONAR_COOLDOWN * Mods.sonar_mul(), 0.01)
+	var c1 := maxf(SONAR_COOLDOWN * Mods.sonar_mul() * (1.0 - Progress.cooldown_bonus()), 0.01)
 	var c2 := maxf(STRONG_COOLDOWN * Mods.strong_mul(), 0.01)
 	return Vector2(_cd / c1, _cd_strong / c2)
 
@@ -122,6 +152,20 @@ func _try_push(dir: Vector2) -> void:
 		dcell = Vector2i(0, signi(int(round(dir.y))))
 	lvl.push_crate(cell, dcell)
 
+## 镜头震动：被抓时抖一下（不改变玩家位置，只动相机偏移）
+func _shake(delta: float) -> void:
+	if _shake_t <= 0.0:
+		return
+	_shake_t -= delta
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	if cam == null:
+		return
+	if _shake_t <= 0.0:
+		cam.offset = Vector2.ZERO
+	else:
+		cam.offset = Vector2(randf_range(-6, 6), randf_range(-6, 6))
+
+
 func _draw() -> void:
 	draw_circle(Vector2.ZERO, 9.0, Color(0.88, 0.96, 1.0))
 	draw_arc(Vector2.ZERO, 12.0, 0.0, TAU, 24, Color(0.6, 0.8, 1.0, 0.55), 1.5, true)
@@ -134,13 +178,16 @@ func win() -> void:
 	Sfx.win()
 	GameLog.end_session("win")
 	var rec: Dictionary = GameLog.last_run()
-	if not Session.is_test():
+	if not Session.is_test() and not Session.is_daily():
 		Progress.record_clear(Progress.level_index, float(rec.get("duration_s", 0.0)),
 			String(rec.get("grade", "-")))
 	# 先让结算面板停一会儿，再进下一关；最后一关就停在这里。
+	var my_gen := _gen
 	await get_tree().create_timer(2.0).timeout
-	if not is_inside_tree():
-		return
+	if not is_inside_tree() or my_gen != _gen:
+		return                     # 这 2 秒里玩家已经按 R 重开/换关了
+	if Session.is_daily():
+		return                     # 每日挑战打完就停在这里看成绩
 	var lv := get_parent()
 	if Progress.advance() and lv != null and lv.has_method("restart"):
 		lv.restart()
@@ -153,4 +200,6 @@ func caught() -> void:
 	_alive = false
 	velocity = Vector2.ZERO
 	Sfx.caught()
+	Sfx.hit()
+	_shake_t = 0.45
 	GameLog.end_session("caught")
