@@ -6,13 +6,13 @@ extends Node
 signal discovered(entry: Dictionary)
 
 const LIST := [
+	# 目标（放第一条：每关都要找它）
+	{"id": "goal", "cat": "目标", "name": "出口", "desc": "绿色菱形，一进关就淡淡地亮着。被声呐扫到或走近之后转亮，并永久标在小地图上。"},
 	# 机关
 	{"id": "door", "cat": "机关", "name": "门", "desc": "关着的时候是墙：挡人、挡光、也挡敌人的路。拿到钥匙才会开。"},
 	{"id": "key", "cat": "机关", "name": "钥匙", "desc": "踩到就收，一次开掉这一关所有的门。"},
 	{"id": "plate", "cat": "机关", "name": "压力板", "desc": "踩一次就永久打开它最近的那扇门。蓝色的，踩下去会变亮。"},
 	{"id": "silence", "cat": "机关", "name": "静音区", "desc": "在里面发声：回声只走得动一点点，敌人完全听不见。安全，但基本看不见路。"},
-	# 目标
-	{"id": "goal", "cat": "目标", "name": "出口", "desc": "绿色菱形，一进关就淡淡地亮着。被声呐扫到或走近之后转亮，并永久标在小地图上。"},
 	# 道具
 	{"id": "crate", "cat": "机关", "name": "木箱", "desc": "挡路的箱子，朝它走就能推一格。它也挡光 —— 推它会改变回声的形状。"},
 	{"id": "fragment", "cat": "道具", "name": "回声碎片", "desc": "绿色的菱形碎片。每关 3 枚，多藏在死胡同里；每 3 枚永久提升一次能力。"},
@@ -59,7 +59,8 @@ func status() -> Array:
 		out.append({
 			"id": String(e["id"]), "cat": String(e["cat"]),
 			"name": String(e["name"]), "desc": String(e["desc"]),
-			"got": prog != null and prog.has_codex(String(e["id"])),
+			# 出口是全局规则（每关都要找它），不参与“没遇到就 ???”，永远显示
+			"got": String(e["id"]) == "goal" or (prog != null and prog.has_codex(String(e["id"]))),
 		})
 	return out
 

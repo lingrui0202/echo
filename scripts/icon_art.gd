@@ -140,6 +140,12 @@ static func draw_goal(c: CanvasItem, size: float) -> void:
 		var a := TAU * float(i) / 4.0 + PI / 4.0
 		c.draw_line(Vector2(cos(a), sin(a)) * d * 0.95, Vector2(cos(a), sin(a)) * d * 1.55,
 			Color(0.70, 1.0, 0.85, 0.75), 1.8)
+	# 直接在图下标「出口」：玩家一进关就知道这个绿菱形是什么
+	var font := ThemeDB.fallback_font
+	var pos := Vector2(-13.0, d + 19.0)
+	c.draw_string_outline(font, pos, "出口", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, 5,
+		Color(0.01, 0.03, 0.02, 0.95))
+	c.draw_string(font, pos, "出口", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.72, 1.0, 0.84))
 
 
 ## 声呐：中心一点 + 三圈逐渐变淡的弧（强声呐用橙色、圈更大）
