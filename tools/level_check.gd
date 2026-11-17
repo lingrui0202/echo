@@ -17,6 +17,10 @@ func _check(cond: bool, ok: String, bad: String) -> void:
 		print("FAIL  ", bad)
 
 func _ready() -> void:
+	# 统一用测试模式：关卡不会弹词条面板（面板会暂停游戏，后续断言全会被冻住）
+	var sess := get_node_or_null("/root/Session")
+	if sess != null:
+		sess.set("mode", 1)
 	await _check_levels()
 	_check_progress()
 	await _check_strong_sonar()

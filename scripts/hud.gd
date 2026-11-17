@@ -16,6 +16,7 @@ var _codex_panel: PanelContainer
 var _codex_open := false
 var _codex_rows: VBoxContainer
 var _codex_sig := ""
+var _paused_by_panel := false
 var _settings: PanelContainer
 var _settings_text: Label
 var _settings_open := false
@@ -48,7 +49,9 @@ func _panel_style() -> StyleBoxFlat:
 	return sb
 
 
+## 面板打开时暂停，但 HUD 自己要继续跑（否则按 Esc/C 关不掉）
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var bar := ColorRect.new()
 	bar.color = Color(0.02, 0.03, 0.05, 0.55)
 	bar.position = Vector2(0, 0)
@@ -204,6 +207,7 @@ func _process(delta: float) -> void:
 	_update_settings_panel()
 	_update_codex_panel()
 	_update_pick_panel()
+	_sync_pause()
 
 	if Input.is_action_just_pressed("stats"):
 		_show_stats = not _show_stats
@@ -406,6 +410,9 @@ func _restart_level() -> void:
 
 ## 关卡被重建后：小地图要按新地图重来，结算面板收起来
 func on_level_changed() -> void:
+	_paused_by_panel = false
+	if get_tree() != null:
+		get_tree().paused = false
 	_minimap_ready = false
 	if _minimap != null:
 		_minimap.call("clear")
@@ -464,11 +471,23 @@ func _update_heartbeat(delta: float) -> void:
 	if best > 520.0:
 		_beat_t = 0.0
 		return
+	if _paused_by_panel:
+		return
 	var interval := lerpf(1.25, 0.32, 1.0 - best / 520.0)
 	_beat_t += delta
 	if _beat_t >= interval:
 		_beat_t = 0.0
 		Sfx.heart()
+
+
+## 任一全屏面板打开 → 暂停；都关了 → 恢复
+func _sync_pause() -> void:
+	var want := _settings_open or _codex_open or _pick.visible
+	if want == _paused_by_panel:
+		return
+	_paused_by_panel = want
+	if get_tree() != null:
+		get_tree().paused = want
 
 
 func _update_settings_panel() -> void:

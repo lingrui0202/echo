@@ -15,7 +15,13 @@ func is_daily() -> bool:
 	var gl := get_node_or_null("/root/GameLog")
 	return gl != null and String(gl.get("mode_tag")) == "daily"
 
+func _clear_pause() -> void:
+	if get_tree() != null:
+		get_tree().paused = false
+
+
 func start_campaign(new_game: bool) -> void:
+	_clear_pause()
 	mode = Mode.CAMPAIGN
 	Progress.reload()          # 回到磁盘上的真实存档（可能刚从测试模式出来）
 	Progress.persist = true
@@ -31,6 +37,7 @@ func start_campaign(new_game: bool) -> void:
 
 ## 测试：五关全开、没有词条、不碰存档
 func start_test(level_index: int = 0) -> void:
+	_clear_pause()
 	mode = Mode.TEST
 	Progress.reload()
 	Progress.persist = false
@@ -43,6 +50,7 @@ func start_test(level_index: int = 0) -> void:
 
 ## 每日挑战：按日期选一关，每天同一关，成绩单独记（mode=daily）
 func start_daily() -> void:
+	_clear_pause()
 	mode = Mode.CAMPAIGN
 	Progress.reload()
 	Progress.persist = false      # 每日挑战不写正式存档（只记 runs.json）
@@ -60,6 +68,7 @@ func daily_level() -> int:
 
 
 func quit_to_menu() -> void:
+	_clear_pause()
 	Progress.save_now()              # 回首页前先落盘
 	Progress.reload()
 	Progress.persist = true
