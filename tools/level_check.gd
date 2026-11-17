@@ -349,6 +349,22 @@ func _check_fragments() -> void:
 	lv2.queue_free()
 	await get_tree().process_frame
 
+	# 出口：声呐扫到之后，小地图要标出来（不只在出口旁边才标）
+	var lv_g: Node = ps.instantiate()
+	add_child(lv_g)
+	await get_tree().process_frame
+	var hud_g: Node = lv_g.get_node("HUD")
+	var mini: Control = hud_g.get("_minimap")
+	_check(not bool(lv_g.call("goal_revealed")), "一开始不知道出口在哪", "一开始就标了出口")
+	var gcell: Vector2i = lv_g.goal_cell()
+	lv_g.call("emit_wave", Vector2(gcell.x * 64 + 32, gcell.y * 64 + 32), false)
+	for i in 40:
+		await get_tree().process_frame
+	var wave_node: Node = lv_g.get("_wave")
+	_check(bool(mini.get("_goal_seen")), "小地图标出已发现的出口", "小地图没标")
+	lv_g.queue_free()
+	await get_tree().process_frame
+
 	# 碎片必须刷在能走到的格子上，并且 HUD 文案写清「剩 X/3」
 	var lv3: Node = ps.instantiate()
 	add_child(lv3)

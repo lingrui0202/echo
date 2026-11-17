@@ -124,14 +124,22 @@ static func draw_fragment(c: CanvasItem, size: float) -> void:
 	c.draw_line(Vector2(0, -d), Vector2(0, d), Color(0.85, 1.0, 0.98, 0.65), 1.1)
 
 static func draw_goal(c: CanvasItem, size: float) -> void:
-	var d := size * 0.34
+	var d := size * 0.40
+	# 外圈光晕：出口是全黑里唯一需要"一眼看到"的东西
+	c.draw_circle(Vector2.ZERO, d * 1.75, Color(0.35, 1.0, 0.65, 0.10))
+	c.draw_circle(Vector2.ZERO, d * 1.30, Color(0.40, 1.0, 0.70, 0.18))
 	var pts := PackedVector2Array([Vector2(0, -d), Vector2(d, 0), Vector2(0, d), Vector2(-d, 0)])
-	c.draw_colored_polygon(pts, Color(0.28, 1.0, 0.60, 0.9))
-	c.draw_polyline(pts + PackedVector2Array([pts[0]]), Color(0.85, 1.0, 0.92), 2.0, true)
+	c.draw_colored_polygon(pts, Color(0.42, 1.0, 0.68, 1.0))
+	c.draw_polyline(pts + PackedVector2Array([pts[0]]), Color(0.92, 1.0, 0.96), 2.4, true)
+	# 内芯
+	var inner := PackedVector2Array([
+		Vector2(0, -d * 0.45), Vector2(d * 0.45, 0), Vector2(0, d * 0.45), Vector2(-d * 0.45, 0),
+	])
+	c.draw_colored_polygon(inner, Color(0.95, 1.0, 0.98, 0.95))
 	for i in 4:
 		var a := TAU * float(i) / 4.0 + PI / 4.0
-		c.draw_line(Vector2(cos(a), sin(a)) * d * 0.55, Vector2(cos(a), sin(a)) * d * 1.35,
-			Color(0.55, 1.0, 0.78, 0.45), 1.2)
+		c.draw_line(Vector2(cos(a), sin(a)) * d * 0.95, Vector2(cos(a), sin(a)) * d * 1.55,
+			Color(0.70, 1.0, 0.85, 0.75), 1.8)
 
 
 ## 声呐：中心一点 + 三圈逐渐变淡的弧（强声呐用橙色、圈更大）

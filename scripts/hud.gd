@@ -575,6 +575,17 @@ func _update_minimap() -> void:
 	var lvl := get_parent()
 	if lvl != null and lvl.has_method("keys_revealed") and lvl.keys_revealed():
 		_minimap.set_keys(lvl.key_cells())
+	if lvl != null and lvl.has_method("goal_cell"):
+		# 出口：声呐波够到，或走到附近，就永久标在地图上
+		var gcell: Vector2i = lvl.goal_cell()
+		var gpos := Vector2(gcell.x * 64.0 + 32.0, gcell.y * 64.0 + 32.0)
+		var seen := _player.global_position.distance_to(gpos) <= 64.0 * 2.6
+		if not seen:
+			var wv: Node = lvl.get("_wave")
+			if wv != null and wv.has_method("is_active") and bool(wv.call("is_active")):
+				seen = Vector2(wv.call("origin")).distance_to(gpos) <= float(wv.call("current_radius")) + 24.0
+		if seen:
+			_minimap.mark_goal(gcell)
 
 
 ## 通关 / 被抓共用一套结算，只改标题和颜色。

@@ -71,6 +71,7 @@ var _silence := {}       # 格子 -> true
 var _plate_door := {}    # 压力板 -> 它控制的门
 var _active_plate := Vector2i(-99, -99)
 var _keys_revealed := false     # 碰过门之后，小地图才标钥匙
+var _goal_revealed := false     # 见过一次出口之后，小地图上标出来
 var _frags := {}          # 格子 -> 节点
 var _overlay: CanvasLayer     # 机关图标画在这层（不受全黑层影响）
 var _reveals := []            # [{node, cell, seen}]
@@ -264,6 +265,7 @@ func _build_objects() -> void:
 	_plate_door.clear()
 	_active_plate = Vector2i(-99, -99)
 	_keys_revealed = false
+	_goal_revealed = false
 
 	for y in map.size():
 		var row: String = map[y]
@@ -571,6 +573,8 @@ func _update_reveals(player_cell: Vector2i) -> void:
 			item["seen"] = true
 			node.visible = true
 			node.modulate.a = 1.0
+			if cell == _goal_cell:
+				_goal_revealed = true
 
 
 func _is_revealed(node: Node2D) -> bool:
@@ -582,6 +586,10 @@ func _is_revealed(node: Node2D) -> bool:
 
 func is_silent_at(pos: Vector2) -> bool:
 	return _silence.has(Vector2i((pos / float(CELL)).floor()))
+
+func goal_revealed() -> bool:
+	return _goal_revealed
+
 
 func keys_revealed() -> bool:
 	return _keys_revealed
@@ -1063,7 +1071,11 @@ func _add_goal(cx: int, cy: int) -> void:
 	cs.shape = shape
 	area.add_child(cs)
 
+	# 出口从一开局就以“淡淡的绿光”存在（否则玩家在黑里根本不知道目标在哪），
+	# 被声呐扫到或走近之后转为全亮
 	var vis := _add_reveal("goal", Vector2i(cx, cy), float(CELL) * 0.9)
+	vis.visible = true
+	vis.modulate.a = 0.38
 
 	# 出口自己是弱光源，黑暗中像一个灯塔。
 	# shadow_enabled 必须打开：PointLight2D 默认不吃遮挡体，不打开的话

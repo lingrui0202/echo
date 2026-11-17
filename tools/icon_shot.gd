@@ -39,7 +39,19 @@ func _process(_d: float) -> void:
 			var cam2: Camera2D = p2.get_node("Camera2D")
 			cam2.global_position = e.global_position
 			cam2.reset_smoothing()
-	if _n == 34:
+	if _n == 20:
+		# 站在出口旁：同时验证出口图标和「小地图标出出口」
+		var g: Vector2i = _lv.goal_cell()
+		var p3: Node2D = _lv.get_node("Player")
+		p3.global_position = Vector2(g.x * 64 + 32, (g.y - 2) * 64 + 32)
+		var cam3: Camera2D = p3.get_node("Camera2D")
+		cam3.global_position = Vector2(g.x * 64 + 32, (g.y - 2) * 64 + 32)
+		cam3.reset_smoothing()
+		_lv.call("emit_wave", p3.global_position, false)
+	if _n == 28:
+		get_viewport().get_texture().get_image().save_png("res://_verify/icon_goal.png")
+		print("[shot] icon_goal.png")
+	if _n == 40:
 		get_viewport().get_texture().get_image().save_png("res://_verify/icon_enemy.png")
 		print("[shot] icon_enemy.png")
 		get_tree().quit()

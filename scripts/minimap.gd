@@ -39,6 +39,15 @@ func clear() -> void:
 
 
 ## 碰到门之后，把钥匙位置标出来
+## 已经见过出口（声呐扫到或走到附近）：地图上永久标出来
+func mark_goal(cell: Vector2i) -> void:
+	if _goal_seen and _goal == cell:
+		return
+	_goal = cell
+	_goal_seen = true
+	queue_redraw()
+
+
 func set_keys(cells: Array) -> void:
 	if cells.size() == _keys.size():
 		var same := true
@@ -110,8 +119,10 @@ func _draw() -> void:
 			2.2, Color(1.0, 0.88, 0.35))
 
 	if _goal_seen:
-		draw_circle(Vector2(PAD, PAD) + (Vector2(_goal) + Vector2(0.5, 0.5)) * CELL_PX,
-			2.4, Color(0.25, 1.0, 0.65))
+		var gp := Vector2(PAD, PAD) + (Vector2(_goal) + Vector2(0.5, 0.5)) * CELL_PX
+		draw_circle(gp, 5.0, Color(0.30, 1.0, 0.60, 0.30))
+		draw_circle(gp, 3.0, Color(0.35, 1.0, 0.68))
+		draw_circle(gp, 1.4, Color(0.95, 1.0, 0.96))
 
 	if _player_cell.x >= 0:
 		draw_circle(Vector2(PAD, PAD) + (Vector2(_player_cell) + Vector2(0.5, 0.5)) * CELL_PX,
