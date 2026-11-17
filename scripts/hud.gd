@@ -488,8 +488,9 @@ func _update_heartbeat(delta: float) -> void:
 		return
 	if _paused_by_panel:
 		return
-	# 1600 px（25 格）内就有心跳：远的时候很慢很轻，越近越急
-	var interval := lerpf(2.10, 0.30, clampf(1.0 - best / 1600.0, 0.0, 1.0))
+	# 1600 px（25 格）内就有心跳；节奏整体加快（远 1.5 s 一拍，贴脸 0.2 s 一拍）
+	var k := clampf(1.0 - best / 1600.0, 0.0, 1.0)
+	var interval := lerpf(1.50, 0.20, pow(k, 0.8))
 	_beat_t += delta
 	if _beat_t >= interval:
 		_beat_t = 0.0

@@ -221,6 +221,21 @@ func _check_enemy_edges() -> void:
 	hud.call("_update_heartbeat", 0.2)
 	var near_beat: float = float(hud.get("_beat_t"))
 	_check(near_beat > 0.0, "700 px 内有心跳", "700 px 听不到心跳")
+	# 节奏：600 px 处应在 0.7 秒内一拍（之前是 1.1 秒左右，偏慢）
+	hud.set("_beat_t", 0.0)
+	var first_beat := -1.0
+	var t_acc := 0.0
+	var prev := 0.0
+	for i in 80:
+		hud.call("_update_heartbeat", 0.05)
+		t_acc += 0.05
+		var cur: float = float(hud.get("_beat_t"))
+		if first_beat < 0.0 and cur < prev:      # 归零 = 打了一拍
+			first_beat = t_acc
+		prev = cur
+	_check(first_beat > 0.0 and first_beat <= 0.85,
+		"700 px 处 %.2f 秒一拍（加快后应 ≤0.85）" % first_beat,
+		"心跳还是一拍 %.2f 秒，太慢" % first_beat)
 	# 测试关敌人常在 1400 px 外：这个距离也必须有心跳
 	e2.global_position = pl.global_position + Vector2(1400, 0)
 	hud.set("_beat_t", 0.0)
