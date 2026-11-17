@@ -606,3 +606,7 @@ func _show_result(reason: String) -> void:
 	_result_text.add_theme_color_override("font_color",
 		Color(0.85, 0.96, 1.0) if reason == "win" else Color(1.0, 0.62, 0.55))
 	_result.visible = true
+	_result.modulate.a = 0.0
+	var rt := create_tween()
+	rt.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	rt.tween_property(_result, "modulate:a", 1.0, 0.22)

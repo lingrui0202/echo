@@ -925,9 +925,12 @@ func _show_intro_card() -> void:
 	title.text = "第 %d 关" % (level_index + 1)
 	title.add_theme_font_size_override("font_size", 46)
 	title.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0))
+	title.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.04, 0.95))
+	title.add_theme_constant_override("outline_size", 10)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.set_anchors_preset(Control.PRESET_FULL_RECT)
-	title.offset_top = -150
+	title.offset_top = -230
+	title.offset_bottom = -230
 	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(title)
@@ -936,10 +939,13 @@ func _show_intro_card() -> void:
 	sub.text = "%d × %d    %s" % [String(Levels.MAPS[level_index][0]).length(),
 		Levels.MAPS[level_index].size(), _intro_hint()]
 	sub.add_theme_font_size_override("font_size", 17)
-	sub.add_theme_color_override("font_color", Color(0.60, 0.72, 0.86))
+	sub.add_theme_color_override("font_color", Color(0.66, 0.78, 0.92))
+	sub.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.04, 0.95))
+	sub.add_theme_constant_override("outline_size", 8)
 	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sub.set_anchors_preset(Control.PRESET_FULL_RECT)
-	sub.offset_top = -86
+	sub.offset_top = -168
+	sub.offset_bottom = -168
 	sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	layer.add_child(sub)
@@ -949,7 +955,7 @@ func _show_intro_card() -> void:
 	t.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)   # 选词条会暂停游戏，标题仍要淡出
 	t.set_parallel(false)
 	t.tween_property(black, "color:a", 0.0, 0.45)
-	t.tween_interval(1.15)
+	t.tween_interval(0.9)
 	t.tween_property(title, "modulate:a", 0.0, 0.45)
 	t.parallel().tween_property(sub, "modulate:a", 0.0, 0.45)
 	t.tween_callback(func() -> void:

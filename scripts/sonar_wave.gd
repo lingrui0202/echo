@@ -252,9 +252,13 @@ func draw_ring(d: CanvasItem) -> void:
 		if _palette == 1:
 			col = Color(1.0, 1.0, 1.0) if not _strong else Color(1.0, 0.9, 0.6)
 		if prev_ok and absf(energy - prev_energy) < 0.35 and prev.distance_to(pt) <= MAX_JOIN_PX:
-			d.draw_line(prev, pt, Color(col.r, col.g, col.b, alpha), 5.0)
+			# 三层叠出"有厚度的一道光"：外层柔光 / 中层主线 / 内层白芯
+			d.draw_line(prev, pt, Color(col.r, col.g, col.b, alpha * 0.16), 13.0)
+			d.draw_line(prev, pt, Color(col.r, col.g, col.b, alpha * 0.55), 6.0)
+			d.draw_line(prev, pt, Color(1.0, 1.0, 1.0, alpha * 0.45), 2.0)
 		else:
-			d.draw_circle(pt, 3.0, Color(col.r, col.g, col.b, alpha))
+			d.draw_circle(pt, 4.5, Color(col.r, col.g, col.b, alpha * 0.22))
+			d.draw_circle(pt, 2.6, Color(col.r, col.g, col.b, alpha * 0.9))
 
 		prev = pt
 		prev_energy = energy
