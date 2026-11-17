@@ -450,7 +450,7 @@ Godot_v4.7.2-stable_win64_console.exe --path <本目录> res://tools/selfcheck.t
 - `scripts/levels.gd` 存 5 张地图（43×25 / 52×31 / 61×34 / 67×37 / 76×43），由 `make_levels.py` 生成。
 - `autoload/progress.gd` 记当前关；通关后停 2 秒进下一关，最后一关显示「全 部 通 关」。
 - 难度靠两件事：地图变大、敌人数 0 / 1 / 1 / 2 / 2（第 1 关没有敌人，先练找路）。
-- `Tab` 面板与状态行显示「第 N/5 关」。
+- `Tab` 面板与状态行显示「第 N/10 关」。
 
 ### 强声呐（E）
 
