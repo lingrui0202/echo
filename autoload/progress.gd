@@ -221,9 +221,17 @@ func take_fragment(level_idx: int, key: String) -> bool:
 	var arr: Array = taken.get(level_idx, [])
 	arr.append(key)
 	taken[level_idx] = arr
+	# 自检只验"这一局能不能捡到"，不往玩家的总碎片/升级里记
+	if not _scoring():
+		return true
 	fragments += 1
 	save_now()
 	return true
+
+
+## 是否在"给玩家记账"：自检 / 测试目录下统统不记账
+func _scoring() -> bool:
+	return persist and not _should_use_test_dir()
 
 ## 永久升级：每 3 枚一档
 func upgrade_tier() -> int:

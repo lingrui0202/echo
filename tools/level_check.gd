@@ -332,7 +332,9 @@ func _check_fragments() -> void:
 	if cells.size() > 0:
 		lv.call("_collect_fragment", cells[0])
 		await get_tree().process_frame
-		_check(int(prog.get("fragments")) == before + 1, "捡到碎片后总数 +1", "碎片没记进存档")
+		# 自检不记账：总数不变，但这一局里已拿过要记下来
+		_check(int(prog.get("fragments")) == before, "自检捡碎片不计入总数", "自检把碎片记进了总数")
+		_check(int(prog.call("fragments_taken", 1)) >= 1, "自检里能记录本局已捡", "本局没记录")
 		_check(lv.call("fragment_cells").size() == cells.size() - 1, "捡过的碎片消失", "碎片还在")
 		_check(int(GameLog.get("fragment_count")) >= 1, "遥测记了碎片", "遥测没记碎片")
 
