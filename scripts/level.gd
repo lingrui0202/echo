@@ -240,6 +240,7 @@ func _build() -> void:
 		_spawn_enemies()
 		_spawn_crates()
 		_note_config(width, height)
+		_show_intro_card()
 
 ## 相机跟随玩家，但别让视口露出地图外：限位到地图矩形，并加一点平滑。
 ## 不设限位时，站在起点（地图左上角）会有半个屏幕是地图外的黑，很出戏。
@@ -896,6 +897,82 @@ func _clear_map() -> void:
 
 func _map_layer() -> Node2D:
 	return get_node("MapLayer")
+
+## 进关时：黑场淡入 + 居中的关卡标题（只在跑游戏时，编辑器里不建）
+func _show_intro_card() -> void:
+	if Engine.is_editor_hint():
+		return
+	var old := get_node_or_null("IntroCard")
+	if old != null:
+		remove_child(old)
+		old.queue_free()
+
+	var layer := CanvasLayer.new()
+	layer.name = "IntroCard"
+	layer.layer = 90
+	add_child(layer)
+
+	var black := ColorRect.new()
+	black.color = Color(0.012, 0.016, 0.026, 1.0)
+	black.set_anchors_preset(Control.PRESET_FULL_RECT)
+	black.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(black)
+
+	var title := Label.new()
+	title.text = "第 %d 关" % (level_index + 1)
+	title.add_theme_font_size_override("font_size", 46)
+	title.add_theme_color_override("font_color", Color(0.88, 0.95, 1.0))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	title.offset_top = -150
+	title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(title)
+
+	var sub := Label.new()
+	sub.text = "%d × %d    %s" % [String(Levels.MAPS[level_index][0]).length(),
+		Levels.MAPS[level_index].size(), _intro_hint()]
+	sub.add_theme_font_size_override("font_size", 17)
+	sub.add_theme_color_override("font_color", Color(0.60, 0.72, 0.86))
+	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sub.set_anchors_preset(Control.PRESET_FULL_RECT)
+	sub.offset_top = -86
+	sub.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	sub.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(sub)
+
+	# 淡入：黑场 0.45 秒化开，标题停 1.4 秒再淡出
+	var t := create_tween()
+	t.set_parallel(false)
+	t.tween_property(black, "color:a", 0.0, 0.45)
+	t.tween_interval(1.15)
+	t.tween_property(title, "modulate:a", 0.0, 0.45)
+	t.parallel().tween_property(sub, "modulate:a", 0.0, 0.45)
+	t.tween_callback(func() -> void:
+		if is_instance_valid(layer):
+			layer.queue_free())
+
+
+## 标题卡第二行：这一关有什么
+func _intro_hint() -> String:
+	var raw: Array = Levels.MAPS[level_index]
+	var body := "".join(raw)
+	var bits: Array = []
+	var n := 0
+	if ENEMY_BY_LEVEL.size() > level_index:
+		n = int(ENEMY_BY_LEVEL[level_index])
+	if n > 0:
+		bits.append("敌人 %d" % n)
+	if body.count("K") > 0:
+		bits.append("钥匙")
+	if body.count("P") > 0:
+		bits.append("压力板")
+	if body.count("X") > 0:
+		bits.append("静音区")
+	if n == 0:
+		bits.append("没有敌人 · 先熟悉回声")
+	return "   ".join(bits)
+
 
 func _add_ground(width: int, height: int) -> void:
 	var size := Vector2(width * CELL, height * CELL)

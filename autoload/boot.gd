@@ -26,6 +26,7 @@ func _ready() -> void:
 	_bind("confirm", [KEY_ENTER, KEY_KP_ENTER])
 	_bind("restart", [KEY_R])
 	_bind("stats", [KEY_TAB])
+	_apply_ui_theme()
 
 ## F11：全屏 / 窗口切换（演示、投影时用；不写进设置文件）
 func _input(event: InputEvent) -> void:
@@ -39,6 +40,20 @@ func _input(event: InputEvent) -> void:
 		else:
 			win.mode = Window.MODE_FULLSCREEN
 		get_viewport().set_input_as_handled()
+
+
+## 全局字体：Godot 自带字体渲染中文偏细、字重不统一，换成系统中文字体
+func _apply_ui_theme() -> void:
+	var f := SystemFont.new()
+	f.font_names = PackedStringArray([
+		"Microsoft YaHei UI", "Microsoft YaHei", "SimHei", "Noto Sans CJK SC", "PingFang SC",
+	])
+	var th := Theme.new()
+	th.default_font = f
+	th.default_font_size = 16
+	var root := get_tree().root if get_tree() != null else null
+	if root != null and "theme" in root:
+		root.theme = th
 
 
 func _bind(action: StringName, keys: Array) -> void:

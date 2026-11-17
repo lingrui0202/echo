@@ -25,6 +25,7 @@ var _cd := 0.0
 var _cd_strong := 0.0
 var _alive := true
 var _facing := Vector2.DOWN
+var _emit_kick := 0.0   # 发声时镜头轻轻一顿
 var _icon: Node2D
 
 func _ready() -> void:
@@ -104,6 +105,7 @@ func _physics_process(delta: float) -> void:
 		_cd = SONAR_COOLDOWN * Mods.sonar_mul() * (1.0 - Progress.cooldown_bonus())
 		sonar.emit()
 		Sfx.ping()
+		_emit_kick = 0.10
 		_unlock_codex("sonar")
 		var level := get_parent()
 		if level != null and level.has_method("emit_wave"):
@@ -116,6 +118,7 @@ func _physics_process(delta: float) -> void:
 		_cd_strong = STRONG_COOLDOWN * Mods.strong_mul()
 		sonar.emit()
 		Sfx.strong()
+		_emit_kick = 0.18
 		_unlock_codex("strong")
 		var lv := get_parent()
 		if lv != null and lv.has_method("emit_wave"):
@@ -126,6 +129,12 @@ func _physics_process(delta: float) -> void:
 	if _icon != null:
 		_icon.global_position = global_position
 		_icon.rotation = _facing.angle() + PI * 0.5
+		# 呼吸：静止时轻轻起伏，移动时更快一点
+		var t := Time.get_ticks_msec() / 1000.0
+		var speed := 2.2 if velocity.length() > 1.0 else 1.4
+		_icon.scale = Vector2.ONE * (1.0 + 0.045 * sin(t * speed))
+	if _emit_kick > 0.0:
+		_emit_kick = maxf(0.0, _emit_kick - delta * 2.2)
 	GameLog.note_position(global_position)
 
 ## 图鉴解锁（不存在 Codex 时静默跳过）
@@ -163,16 +172,19 @@ func _try_push(dir: Vector2) -> void:
 
 ## 镜头震动：被抓时抖一下（不改变玩家位置，只动相机偏移）
 func _shake(delta: float) -> void:
+	var cam := get_node_or_null("Camera2D") as Camera2D
+	# 发声时的“顿一下”：幅度很小，方向固定（向下），像被声波推了一下
+	if _emit_kick > 0.0 and cam != null:
+		cam.offset = Vector2(0.0, 3.0 * (_emit_kick / 0.18))
 	if _shake_t <= 0.0:
 		return
 	_shake_t -= delta
-	var cam := get_node_or_null("Camera2D") as Camera2D
 	if cam == null:
 		return
-	if _shake_t <= 0.0:
+	if _shake_t <= 0.0 and _emit_kick <= 0.0:
 		cam.offset = Vector2.ZERO
-	else:
-		cam.offset = Vector2(randf_range(-6, 6), randf_range(-6, 6))
+	elif _shake_t > 0.0:
+		cam.offset += Vector2(randf_range(-6, 6), randf_range(-6, 6))
 
 
 ## 图标画在屏幕层（不受全黑层影响），否则玩家自己都看不见

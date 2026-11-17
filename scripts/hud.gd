@@ -207,6 +207,7 @@ func _process(delta: float) -> void:
 	_update_settings_panel()
 	_update_codex_panel()
 	_update_pick_panel()
+	_fade_panels()
 	_sync_pause()
 
 	if Input.is_action_just_pressed("stats"):
@@ -486,6 +487,17 @@ func _update_heartbeat(delta: float) -> void:
 	if _beat_t >= interval:
 		_beat_t = 0.0
 		Sfx.heart()
+
+
+## 面板淡入（打开的一瞬间不要"啪"地出现）
+func _fade_panels() -> void:
+	for c in [_settings, _codex_panel, _pick]:
+		if c == null:
+			continue
+		if c.visible:
+			c.modulate.a = minf(1.0, c.modulate.a + 0.16)
+		else:
+			c.modulate.a = 0.0
 
 
 ## 任一全屏面板打开 → 暂停；都关了 → 恢复
