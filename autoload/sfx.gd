@@ -37,15 +37,18 @@ func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> Audio
 	w.data = data
 	return w
 
-## 心跳：两下"咚咚"，频率放在 120–160 Hz（笔记本扬声器在这个区间才发得出来，
-## 56 Hz 那种次低频大多数设备直接听不见，这也是"明明有代码却没声音"的原因）
+## 心跳：两下"咚咚"。
+## 低频 58 Hz 是耳机里的"沉"，但笔记本外放几乎发不出 150 Hz 以下，
+## 所以再叠 116 Hz 与 232 Hz 两层谐波——同一个音，在两种设备上都能听见。
 func _heart_tone() -> AudioStreamWAV:
-	var dur := 0.42
+	var dur := 0.46
 	var n := int(RATE * dur)
 	var data := PackedByteArray()
 	data.resize(n * 2)
-	# 两拍：0.00s 和 0.16s，第二拍稍轻
-	var beats := [[0.0, 1.0], [0.16, 0.72]]
+	var beats := [[0.0, 1.0], [0.17, 0.70]]
+	var peak := 0.0
+	var buf := PackedFloat32Array()
+	buf.resize(n)
 	for i in n:
 		var t := float(i) / float(RATE)
 		var v := 0.0
@@ -53,12 +56,17 @@ func _heart_tone() -> AudioStreamWAV:
 			var t0: float = b[0]
 			var gain: float = b[1]
 			var dt := t - t0
-			if dt < 0.0 or dt > 0.16:
+			if dt < 0.0 or dt > 0.20:
 				continue
-			var env := exp(-14.0 * dt) * (1.0 - exp(-90.0 * dt))
-			# 基频 120 Hz + 二次谐波，听起来更"肉"而不是"嗡嗡"
-			v += (sin(TAU * 120.0 * dt) * 0.75 + sin(TAU * 240.0 * dt) * 0.25) * env * gain * 0.55
-		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 32767.0))
+			var env := exp(-13.0 * dt) * (1.0 - exp(-120.0 * dt))
+			v += (sin(TAU * 58.0 * dt) * 0.80
+				+ sin(TAU * 116.0 * dt) * 0.30
+				+ sin(TAU * 232.0 * dt) * 0.34) * env * gain
+		buf[i] = v
+		peak = maxf(peak, absf(v))
+	var norm := 0.92 / maxf(peak, 0.001)
+	for i in n:
+		data.encode_s16(i * 2, int(clampf(buf[i] * norm, -1.0, 1.0) * 32767.0))
 	var w := AudioStreamWAV.new()
 	w.format = AudioStreamWAV.FORMAT_16_BITS
 	w.mix_rate = RATE

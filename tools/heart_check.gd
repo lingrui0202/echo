@@ -15,6 +15,7 @@ func _ready() -> void:
 		var v := absi(data.decode_s16(i))
 		peak = maxi(peak, v)
 	print("[heart] 时长 %.2fs  峰值 %d/32767  采样率 %d" % [float(data.size()) / 2.0 / float(w.mix_rate), peak, w.mix_rate])
+	w.save_to_wav("res://_verify/heart.wav")
 	p.volume_db = 0.0
 	sfx.call("heart")
 	await get_tree().process_frame
