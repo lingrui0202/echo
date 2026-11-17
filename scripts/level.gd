@@ -20,6 +20,7 @@ const Maze = preload("res://scripts/maze.gd")
 const Levels = preload("res://scripts/levels.gd")
 const EnemyScene = preload("res://scenes/Enemy.tscn")
 const EnemyScript = preload("res://scripts/enemy.gd")
+const IconNode = preload("res://scripts/icon_node.gd")
 
 const CELL := 64
 
@@ -71,6 +72,8 @@ var _plate_door := {}    # 压力板 -> 它控制的门
 var _active_plate := Vector2i(-99, -99)
 var _keys_revealed := false     # 碰过门之后，小地图才标钥匙
 var _frags := {}          # 格子 -> 节点
+var _overlay: CanvasLayer     # 机关图标画在这层（不受全黑层影响）
+var _reveals := []            # [{node, cell, seen}]
 
 ## 编辑器里预览哪一关（1–5）。游戏里不看这个值，游戏读 Progress.level_index。
 @export_range(1, 10, 1) var editor_level: int = 1:
@@ -200,6 +203,16 @@ func _build() -> void:
 	_add_wall(walls, -1, 0, 1, height)
 	_add_wall(walls, width, 0, 1, height)
 
+	if not Engine.is_editor_hint():
+		var old_ov := get_node_or_null("Overlay")
+		if old_ov != null:
+			remove_child(old_ov)
+			old_ov.queue_free()
+		_overlay = CanvasLayer.new()
+		_overlay.name = "Overlay"
+		_overlay.follow_viewport_enabled = true
+		add_child(_overlay)
+	_reveals.clear()
 	_build_objects()
 	_spawn_fragments()
 
@@ -263,11 +276,27 @@ func _build_objects() -> void:
 					_add_key(root, cell)
 				"X":
 					_silence[cell] = true
+					_add_reveal("silence", cell, float(CELL) * 1.0)
 	_link_plates()
 
 	# 门一开始是关的（改了 map，寻路/射线就都过不去）
 	for cell in _doors.keys():
 		_set_door_closed(cell, true)
+
+## 建一个"要被声呐发现"的图标
+func _add_reveal(id: String, cell: Vector2i, size_px: float, always: bool = false) -> Node2D:
+	var icon := IconNode.IconNode.new()
+	icon.icon_id = id
+	icon.icon_size = size_px
+	icon.position = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
+	icon.visible = always
+	if _overlay != null:
+		_overlay.add_child(icon)
+	else:
+		add_child(icon)
+	_reveals.append({"node": icon, "cell": cell, "seen": always})
+	return icon
+
 
 func _add_door(root: Node2D, cell: Vector2i) -> void:
 	var body := StaticBody2D.new()
@@ -289,34 +318,17 @@ func _add_door(root: Node2D, cell: Vector2i) -> void:
 	occ.occluder = poly
 	body.add_child(occ)
 
-	var vis := Polygon2D.new()
-	vis.polygon = PackedVector2Array([
-		Vector2(-CELL * 0.46, -CELL * 0.46), Vector2(CELL * 0.46, -CELL * 0.46),
-		Vector2(CELL * 0.46, CELL * 0.46), Vector2(-CELL * 0.46, CELL * 0.46)])
-	vis.color = Color(0.85, 0.62, 0.25)
-	body.add_child(vis)
+	var vis := _add_reveal("door", cell, float(CELL) * 0.92)
 
 	root.add_child(body)
 	_doors[cell] = {"body": body, "occ": occ, "vis": vis, "closed": true, "poly": poly}
 
 func _add_plate(root: Node2D, cell: Vector2i) -> void:
-	var vis := Polygon2D.new()
-	vis.position = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
-	var d := CELL * 0.30
-	vis.polygon = PackedVector2Array([Vector2(-d, -d), Vector2(d, -d), Vector2(d, d), Vector2(-d, d)])
-	vis.color = Color(0.35, 0.60, 0.95)
-	root.add_child(vis)
+	var vis := _add_reveal("plate", cell, float(CELL) * 0.78)
 	_plates[cell] = vis
 
 func _add_key(root: Node2D, cell: Vector2i) -> void:
-	var vis := Node2D.new()
-	vis.position = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
-	var dot := Polygon2D.new()
-	var d := CELL * 0.14
-	dot.polygon = PackedVector2Array([Vector2(0, -d), Vector2(d, 0), Vector2(0, d), Vector2(-d, 0)])
-	dot.color = Color(1.0, 0.88, 0.35)
-	vis.add_child(dot)
-	root.add_child(vis)
+	var vis := _add_reveal("key", cell, float(CELL) * 0.62)
 	_keys[cell] = vis
 
 ## 每块压力板连到最近的那扇门
@@ -344,8 +356,9 @@ func _set_door_closed(cell: Vector2i, closed: bool) -> void:
 		occ.occluder = d["poly"]
 	else:
 		occ.occluder = null        # Godot 4 的 LightOccluder2D 没有 enabled，置空即关闭
-	var vis: Polygon2D = d["vis"]
-	vis.visible = closed
+	var vis: Node2D = d["vis"]
+	if is_instance_valid(vis):
+		vis.visible = closed and _is_revealed(vis)
 	# 地图也跟着改：敌人寻路、BFS、射线都用它
 	var row: String = map[cell.y]
 	if closed:
@@ -382,6 +395,7 @@ func _process(_delta: float) -> void:
 				_keys_revealed = true
 				break
 
+	_update_reveals(cell)
 	_codex_proximity(cell)      # 先记图鉴：踩到钥匙会被立刻收走
 	if _keys.has(cell):
 		_collect_key(cell)
@@ -396,8 +410,7 @@ func _process(_delta: float) -> void:
 			GameLog.note_plate()
 
 	for pcell in _plates.keys():
-		var vis: Polygon2D = _plates[pcell]
-		vis.color = Color(0.55, 0.95, 1.0) if pcell == _active_plate else Color(0.35, 0.60, 0.95)
+		_plates[pcell].call("set_active", pcell == _active_plate)
 
 ## 回声碎片：每关 3 枚，放在「死胡同」这种要多走两步的地方
 func _spawn_fragments() -> void:
@@ -468,20 +481,8 @@ func _spawn_fragments() -> void:
 		placed += 1
 
 func _add_fragment(root: Node2D, cell: Vector2i, key: String) -> void:
-	var node := Node2D.new()
-	node.position = Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
-	var d := CELL * 0.16
-	var poly := Polygon2D.new()
-	poly.polygon = PackedVector2Array([Vector2(0, -d), Vector2(d, 0), Vector2(0, d), Vector2(-d, 0)])
-	poly.color = Color(0.45, 1.0, 0.85)
-	node.add_child(poly)
-	var ring := Polygon2D.new()
-	var r := CELL * 0.26
-	ring.polygon = PackedVector2Array([Vector2(0, -r), Vector2(r, 0), Vector2(0, r), Vector2(-r, 0)])
-	ring.color = Color(0.25, 0.75, 0.65, 0.45)
-	node.add_child(ring)
+	var node := _add_reveal("fragment", cell, float(CELL) * 0.60)
 	node.set_meta("key", key)
-	root.add_child(node)
 	_frags[cell] = node
 
 func fragment_cells() -> Array:
@@ -542,6 +543,37 @@ func _near_any(cell: Vector2i, cells: Array, radius: int) -> bool:
 	for c in cells:
 		if cell.distance_to(Vector2i(c)) <= radius:
 			return true
+	return false
+
+
+## 声呐波扫过，或玩家走到两步内，就把图标显出来（之后一直留着 = 记住了）
+func _update_reveals(player_cell: Vector2i) -> void:
+	var r := -1.0
+	var org := Vector2.ZERO
+	if _wave != null and _wave.has_method("is_active") and _wave.is_active():
+		r = _wave.current_radius()
+		org = _wave.origin()
+	var pc := Vector2(player_cell.x * CELL + CELL * 0.5, player_cell.y * CELL + CELL * 0.5)
+	for item in _reveals:
+		if item["seen"]:
+			continue
+		var node: Node2D = item["node"]
+		if not is_instance_valid(node):
+			continue
+		var cell: Vector2i = item["cell"]
+		var wpos := Vector2(cell.x * CELL + CELL * 0.5, cell.y * CELL + CELL * 0.5)
+		var by_wave := r >= 0.0 and org.distance_to(wpos) <= r + CELL * 0.6
+		var by_player := pc.distance_to(wpos) <= CELL * 2.2
+		if by_wave or by_player:
+			item["seen"] = true
+			node.visible = true
+			node.modulate.a = 1.0
+
+
+func _is_revealed(node: Node2D) -> bool:
+	for item in _reveals:
+		if item["node"] == node:
+			return bool(item["seen"])
 	return false
 
 
@@ -731,13 +763,7 @@ func _add_crate(root: Node2D, cell: Vector2i) -> void:
 	occ.occluder = poly
 	body.add_child(occ)
 
-	var vis := Polygon2D.new()
-	vis.polygon = PackedVector2Array([
-		Vector2(-CELL * 0.42, -CELL * 0.42), Vector2(CELL * 0.42, -CELL * 0.42),
-		Vector2(CELL * 0.42, CELL * 0.42), Vector2(-CELL * 0.42, CELL * 0.42),
-	])
-	vis.color = Color(0.55, 0.46, 0.32)
-	body.add_child(vis)
+	var vis := _add_reveal("crate", cell, float(CELL) * 0.9)
 
 	root.add_child(body)
 	_crates[cell] = body
@@ -892,11 +918,7 @@ func _add_goal(cx: int, cy: int) -> void:
 	cs.shape = shape
 	area.add_child(cs)
 
-	var d := CELL * 0.28
-	var vis := Polygon2D.new()
-	vis.polygon = PackedVector2Array([Vector2(0, -d), Vector2(d, 0), Vector2(0, d), Vector2(-d, 0)])
-	vis.color = Color(0.30, 1.0, 0.65)
-	area.add_child(vis)
+	var vis := _add_reveal("goal", Vector2i(cx, cy), float(CELL) * 0.9)
 
 	# 出口自己是弱光源，黑暗中像一个灯塔。
 	# shadow_enabled 必须打开：PointLight2D 默认不吃遮挡体，不打开的话

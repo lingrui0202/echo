@@ -15,6 +15,7 @@ extends CharacterBody2D
 
 const Maze = preload("res://scripts/maze.gd")
 const LightFactory = preload("res://scripts/light_factory.gd")
+const IconArt = preload("res://scripts/icon_art.gd")
 
 const HEAR_RADIUS := 700.0      # px，约 11 格
 const SPEED := 168.0            # px/s：玩家 235，直线跑得掉，但拐弯会被抄近路
@@ -52,6 +53,7 @@ var _path: Array = []
 var _player: Node2D = null
 var _glow: PointLight2D = null
 var _pulse := 0.0
+var _icon: Node2D
 
 var _lost := 0.0
 var _search_left := 0.0
@@ -75,7 +77,7 @@ func _ready() -> void:
 	glow.shadow_enabled = true
 	add_child(glow)
 	_glow = glow
-	queue_redraw()
+	_build_icon()
 
 ## 呼吸式微光：静止时慢慢起伏，追击时整体变亮 1.6 倍。
 ## 暗处只靠本体（CanvasItem）是看不见的，这盏灯才是玩家发现敌人的线索。
@@ -85,6 +87,11 @@ func _process(delta: float) -> void:
 	_pulse += delta
 	var boost := 1.6 if _has_target else 1.0
 	_glow.energy = maxf(0.0, LIGHT_ENERGY * boost + 0.03 * sin(_pulse * 2.0))
+	if _icon != null:
+		_icon.global_position = global_position
+		var player := get_tree().get_first_node_in_group("player")
+		var near := player != null and global_position.distance_to(player.global_position) < 210.0
+		_icon.visible = near or _has_target or _searching
 
 func setup(rows: Array, cell_px: float, home: Vector2i, enemy_kind: int = KIND_NORMAL) -> void:
 	_rows = rows
@@ -261,18 +268,16 @@ func _check_catch() -> void:
 		_has_target = false
 		_path.clear()
 
+## 敌人图标也画在屏幕层：平时看不见，靠近或追击时才现形（红色微光就是它的位置线索）
+func _build_icon() -> void:
+	var layer := CanvasLayer.new()
+	layer.follow_viewport_enabled = true
+	add_child(layer)
+	var icon := preload("res://scripts/icon_node.gd").IconNode.new()
+	icon.icon_id = ["enemy_normal", "enemy_blind", "enemy_sharp"][clampi(kind, 0, 2)]
+	icon.icon_size = 30.0
+	layer.add_child(icon)
+	_icon = icon
+
 func _draw() -> void:
-	var base := Color(0.70, 0.22, 0.20, 0.7)
-	var hot := Color(0.95, 0.35, 0.30, 0.9)
-	if kind == KIND_BLIND:
-		base = Color(0.55, 0.35, 0.85, 0.7)
-		hot = Color(0.78, 0.50, 1.0, 0.95)
-	elif kind == KIND_SHARP:
-		base = Color(0.85, 0.55, 0.15, 0.75)
-		hot = Color(1.0, 0.75, 0.25, 0.95)
-	var ring := hot if _has_target else base
-	if _searching and not _has_target:
-		ring = Color(1.0, 0.85, 0.35, 0.9)
-		base = Color(0.85, 0.72, 0.30, 0.75)
-	draw_circle(Vector2.ZERO, 11.0, Color(0.22, 0.05, 0.05, 0.9))
-	draw_arc(Vector2.ZERO, 13.0, 0.0, TAU, 24, ring, 2.0, true)
+	pass

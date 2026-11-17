@@ -70,17 +70,37 @@ func _ready() -> void:
 	hud.call("_update_codex_panel")
 	await get_tree().process_frame
 	var panel: PanelContainer = hud.get("_codex_panel")
-	var body: Label = panel.get_node("Body")
-	var txt := String(body.text)
 	_check(panel.visible, "游戏内能打开图鉴", "图鉴面板没显示")
-	_check(txt.contains("门") and txt.contains("???"), "图鉴面板同时显示已解锁与未解锁",
-		"图鉴面板内容不对：%s" % txt.left(60))
-	_check(txt.contains("机关") and txt.contains("敌人"), "图鉴按类别分组", "没有分组")
-	_check(txt.contains("木箱"), "图鉴里能看到木箱", "图鉴里没有木箱")
-	await get_tree().process_frame
-	get_viewport().get_texture().get_image().save_png("res://_verify/codex_ingame.png")
-	print("[shot] _verify/codex_ingame.png")
 
+	var rows: VBoxContainer = hud.get("_codex_rows")
+	await get_tree().process_frame
+	var all_text := ""
+	var icons := 0
+	var hboxes := 0
+	if rows != null:
+		for c in rows.get_children():
+			if c is Label:
+				all_text += String(c.text) + "
+"
+			elif c is HBoxContainer:
+				hboxes += 1
+				for t in c.get_children():
+					if String(t.get_class()).contains("IconRect") or t.get_script() != null:
+						icons += 1
+					if t is VBoxContainer:
+						for l in t.get_children():
+							if l is Label:
+								all_text += String(l.text) + "
+"
+	_check(icons >= 11, "图鉴里有 %d 个图标" % icons, "图标数量不对：%d" % icons)
+	_check(all_text.contains("门") and all_text.contains("？？？"), "图鉴同时显示已解锁与未解锁",
+		"图鉴内容不对：%s" % all_text.left(80))
+	_check(all_text.contains("机关") and all_text.contains("敌人"), "图鉴按类别分组", "没有分组")
+
+	await get_tree().process_frame
+	await get_tree().process_frame
+	get_viewport().get_texture().get_image().save_png("res://_verify/codex_icons.png")
+	print("[shot] codex_icons.png")
 	prog.set("persist", true)
 	lv.queue_free()
 	await get_tree().process_frame

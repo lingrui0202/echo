@@ -1,6 +1,7 @@
 extends CanvasLayer
 
 const Minimap = preload("res://scripts/minimap.gd")
+const IconNode = preload("res://scripts/icon_node.gd")
 ## HUD：状态行 + 足迹小地图 + 教学提示 + Tab 数据面板 + Esc 设置 + 结算面板 + 心跳音。
 ## 放在 CanvasLayer 上，所以不受 CanvasModulate 变暗影响。
 
@@ -13,6 +14,8 @@ var _show_stats := false
 
 var _codex_panel: PanelContainer
 var _codex_open := false
+var _codex_rows: VBoxContainer
+var _codex_sig := ""
 var _settings: PanelContainer
 var _settings_text: Label
 var _settings_open := false
@@ -151,13 +154,21 @@ func _ready() -> void:
 	_codex_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	_codex_panel.visible = false
 	_codex_panel.add_theme_stylebox_override("panel", _panel_style())
-	var codex_label := Label.new()
-	codex_label.add_theme_font_size_override("font_size", 15)
-	codex_label.add_theme_color_override("font_color", Color(0.86, 0.93, 1.0))
-	codex_label.custom_minimum_size = Vector2(620, 0)
-	codex_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	codex_label.name = "Body"
-	_codex_panel.add_child(codex_label)
+	var title := Label.new()
+	title.text = "图 鉴（C 关闭）"
+	title.add_theme_font_size_override("font_size", 17)
+	title.add_theme_color_override("font_color", Color(0.86, 0.93, 1.0))
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(700, 480)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_codex_rows = VBoxContainer.new()
+	_codex_rows.add_theme_constant_override("separation", 6)
+	_codex_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_codex_rows)
+	var box := VBoxContainer.new()
+	box.add_child(title)
+	box.add_child(scroll)
+	_codex_panel.add_child(box)
 	add_child(_codex_panel)
 
 	# 受击红闪
@@ -259,31 +270,69 @@ func _process(delta: float) -> void:
 func _update_codex_panel() -> void:
 	if Input.is_action_just_pressed("codex"):
 		_codex_open = not _codex_open
+		_codex_sig = ""
 		if _codex_open:
 			_settings_open = false
 			_settings.visible = false
 	_codex_panel.visible = _codex_open
 	if not _codex_open:
 		return
-	var body: Label = _codex_panel.get_node("Body")
+	_rebuild_codex_rows()
+
+
+## 图鉴行：图标 + 名字 + 说明；没解锁的画成暗色剪影 + ???
+func _rebuild_codex_rows() -> void:
 	var codex := get_node_or_null("/root/Codex")
-	if codex == null:
-		body.text = "图鉴不可用"
+	if codex == null or _codex_rows == null:
 		return
-	var lines := "图 鉴（C 关闭）\n"
+	var list: Array = codex.call("status")
+	var sig := ""
+	for e in list:
+		sig += "1" if bool(e["got"]) else "0"
+	if sig == _codex_sig:
+		return
+	_codex_sig = sig
+
+	for c in _codex_rows.get_children():
+		c.queue_free()
+
 	var last_cat := ""
-	for e in codex.call("status"):
+	for e in list:
 		var cat := String(e["cat"])
 		if cat != last_cat:
-			lines += "\n【%s】\n" % cat
+			var h := Label.new()
+			h.text = "【%s】" % cat
+			h.add_theme_font_size_override("font_size", 15)
+			h.add_theme_color_override("font_color", Color(0.62, 0.78, 1.0))
+			_codex_rows.add_child(h)
 			last_cat = cat
-		if bool(e["got"]):
-			lines += "  %s —— %s\n" % [String(e["name"]), String(e["desc"])]
-		else:
-			lines += "  ???  还没遇到\n"
-	lines += "\n已解锁 %d / %d（跟着这个存档）" % [
-		codex.call("unlocked_count"), codex.call("status").size()]
-	body.text = lines
+
+		var got := bool(e["got"])
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		var icon := IconNode.IconRect.new()
+		icon.icon_id = String(e["id"])
+		icon.icon_size = 30.0
+		icon.dim = not got
+		row.add_child(icon)
+
+		var texts := VBoxContainer.new()
+		texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var nm := Label.new()
+		nm.text = String(e["name"]) if got else "？？？"
+		nm.add_theme_font_size_override("font_size", 15)
+		nm.add_theme_color_override("font_color",
+			Color(0.92, 0.96, 1.0) if got else Color(0.55, 0.60, 0.70))
+		texts.add_child(nm)
+		var ds := Label.new()
+		ds.text = String(e["desc"]) if got else "还没遇到"
+		ds.add_theme_font_size_override("font_size", 12)
+		ds.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ds.custom_minimum_size = Vector2(600, 0)
+		ds.add_theme_color_override("font_color", Color(0.70, 0.76, 0.86))
+		texts.add_child(ds)
+		row.add_child(texts)
+		_codex_rows.add_child(row)
 
 
 ## 词条二选一：按 1 / 2 选，选完才允许移动（player 那边会卡住）

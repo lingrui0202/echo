@@ -98,6 +98,16 @@ func set_palette(p: int) -> void:
 
 
 ## 换关时清空墙上的记忆，否则上一张图的轮廓会留在新图上
+func is_active() -> bool:
+	return _t >= 0.0
+
+func current_radius() -> float:
+	return maxf(MIN_RADIUS, _speed * _t)
+
+func origin() -> Vector2:
+	return _origin
+
+
 func clear_memory() -> void:
 	if _edge_img != null:
 		_edge_img.fill(Color(0, 0, 0, 0))

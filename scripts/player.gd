@@ -2,6 +2,7 @@ extends CharacterBody2D
 ## 玩家：移动 + 发声呐 + 通关判定。
 
 const LightFactory = preload("res://scripts/light_factory.gd")
+const IconArt = preload("res://scripts/icon_art.gd")
 
 const SPEED := 235.0
 const SONAR_COOLDOWN := 1.8     # ← 报告里的核心实验变量
@@ -23,10 +24,13 @@ var _gen := 0
 var _cd := 0.0
 var _cd_strong := 0.0
 var _alive := true
+var _facing := Vector2.DOWN
+var _icon: Node2D
 
 func _ready() -> void:
 	add_to_group("player")
 	Sfx.start_ambient()
+	_build_icon()
 	ambient.texture = LightFactory.ring_texture(AMBIENT_RADIUS * 2, 0.45, 0.82)
 	ambient.energy = AMBIENT_ENERGY * Settings.light_mul()
 	_upgrade_light()
@@ -90,6 +94,8 @@ func _physics_process(delta: float) -> void:
 			_step_t = 0.42
 			Sfx.step()
 		_try_push(dir)
+	if dir != Vector2.ZERO:
+		_facing = dir
 	velocity = dir * SPEED * Mods.speed_mul()
 	move_and_slide()
 
@@ -117,6 +123,9 @@ func _physics_process(delta: float) -> void:
 		GameLog.note_sonar()
 
 	_shake(delta)
+	if _icon != null:
+		_icon.global_position = global_position
+		_icon.rotation = _facing.angle() + PI * 0.5
 	GameLog.note_position(global_position)
 
 ## 图鉴解锁（不存在 Codex 时静默跳过）
@@ -166,9 +175,19 @@ func _shake(delta: float) -> void:
 		cam.offset = Vector2(randf_range(-6, 6), randf_range(-6, 6))
 
 
+## 图标画在屏幕层（不受全黑层影响），否则玩家自己都看不见
+func _build_icon() -> void:
+	var layer := CanvasLayer.new()
+	layer.follow_viewport_enabled = true
+	add_child(layer)
+	var icon := preload("res://scripts/icon_node.gd").IconNode.new()
+	icon.icon_id = "player"
+	icon.icon_size = 26.0
+	layer.add_child(icon)
+	_icon = icon
+
 func _draw() -> void:
-	draw_circle(Vector2.ZERO, 9.0, Color(0.88, 0.96, 1.0))
-	draw_arc(Vector2.ZERO, 12.0, 0.0, TAU, 24, Color(0.6, 0.8, 1.0, 0.55), 1.5, true)
+	pass
 
 func win() -> void:
 	if not _alive:
