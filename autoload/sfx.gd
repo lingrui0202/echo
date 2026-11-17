@@ -14,7 +14,7 @@ func _ready() -> void:
 	_add("caught", _tone(140.0, 0.6, 0.6, 70.0))
 	_add("win", _tone(660.0, 0.45, 0.4, 990.0))
 	# 心跳：低频、很短，靠间隔表达"还有多远"
-	_add("heart", _tone(56.0, 0.17, 0.95, 38.0))
+	_add("heart", _heart_tone())
 	_add("frag", _tone(1046.0, 0.30, 0.35, 1568.0))
 	_add("step", _tone(180.0, 0.07, 0.18, 120.0))
 	_add("hit", _tone(90.0, 0.35, 0.55, 55.0))
@@ -36,6 +36,36 @@ func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> Audio
 	w.stereo = false
 	w.data = data
 	return w
+
+## 心跳：两下"咚咚"，频率放在 120–160 Hz（笔记本扬声器在这个区间才发得出来，
+## 56 Hz 那种次低频大多数设备直接听不见，这也是"明明有代码却没声音"的原因）
+func _heart_tone() -> AudioStreamWAV:
+	var dur := 0.42
+	var n := int(RATE * dur)
+	var data := PackedByteArray()
+	data.resize(n * 2)
+	# 两拍：0.00s 和 0.16s，第二拍稍轻
+	var beats := [[0.0, 1.0], [0.16, 0.72]]
+	for i in n:
+		var t := float(i) / float(RATE)
+		var v := 0.0
+		for b in beats:
+			var t0: float = b[0]
+			var gain: float = b[1]
+			var dt := t - t0
+			if dt < 0.0 or dt > 0.16:
+				continue
+			var env := exp(-14.0 * dt) * (1.0 - exp(-90.0 * dt))
+			# 基频 120 Hz + 二次谐波，听起来更"肉"而不是"嗡嗡"
+			v += (sin(TAU * 120.0 * dt) * 0.75 + sin(TAU * 240.0 * dt) * 0.25) * env * gain * 0.55
+		data.encode_s16(i * 2, int(clampf(v, -1.0, 1.0) * 32767.0))
+	var w := AudioStreamWAV.new()
+	w.format = AudioStreamWAV.FORMAT_16_BITS
+	w.mix_rate = RATE
+	w.stereo = false
+	w.data = data
+	return w
+
 
 ## 循环低频环境音
 func _loop_tone(freq: float, dur: float, amp: float) -> AudioStreamWAV:
@@ -72,6 +102,9 @@ func win() -> void:
 	play("win")
 
 func heart() -> void:
+	var p: AudioStreamPlayer = _players.get("heart")
+	if p != null:
+		p.volume_db = 2.0
 	play("heart")
 
 func step() -> void:

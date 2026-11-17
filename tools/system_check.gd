@@ -221,10 +221,19 @@ func _check_enemy_edges() -> void:
 	hud.call("_update_heartbeat", 0.2)
 	var near_beat: float = float(hud.get("_beat_t"))
 	_check(near_beat > 0.0, "700 px 内有心跳", "700 px 听不到心跳")
-	e2.global_position = pl.global_position + Vector2(1100, 0)
+	# 测试关敌人常在 1400 px 外：这个距离也必须有心跳
+	e2.global_position = pl.global_position + Vector2(1400, 0)
 	hud.set("_beat_t", 0.0)
 	hud.call("_update_heartbeat", 0.2)
-	_check(float(hud.get("_beat_t")) == 0.0, "1100 px 外没有心跳", "太远还在响")
+	_check(float(hud.get("_beat_t")) > 0.0, "1400 px 内也有心跳（测试关不会静音）", "1400 px 听不到")
+	# 把所有敌人都挪远，否则最近的另一只还会触发心跳
+	var idx_e := 0
+	for other in box.get_children():
+		other.global_position = pl.global_position + Vector2(1900 + idx_e * 80, 0)
+		idx_e += 1
+	hud.set("_beat_t", 0.0)
+	hud.call("_update_heartbeat", 0.2)
+	_check(float(hud.get("_beat_t")) == 0.0, "1900 px 外没有心跳", "太远还在响")
 
 	# 8) 巡逻：跑一会儿应该真的移动过
 	e.set("_has_target", false)
