@@ -634,10 +634,19 @@ func _spawn_enemies() -> void:
 	var raw: Array = Levels.MAPS[level_index]
 	var route := Maze.path(raw, START, _goal_cell)
 	_enemy_cells.clear()
+	# 第一关之后敌人会变多，但都不能贴着起点埋伏：
+	# 锚点至少离起点 22 步（第 2 关 30 步），并且相邻锚点至少错开 6 步
+	var min_idx := 30 if level_index == 1 else 22
+	var prev_idx := -999
 	for frac in ENEMY_ROUTE_FRACS:
 		if _enemy_cells.size() >= _enemy_target() or route.is_empty():
 			break
 		var idx := clampi(int(round(float(route.size()) * float(frac))), 0, route.size() - 1)
+		idx = maxi(idx, min_idx)
+		if idx <= prev_idx:
+			idx = prev_idx + 6
+		idx = mini(idx, route.size() - 1)
+		prev_idx = idx
 		var anchor: Vector2i = route[idx]
 		# 半径 3 内找候选：优先「不在最短路上」的格子（不挡唯一通道），再按距离取近的。
 		# 之前只看四邻，锚点四周全是路线时只能退回锚点，导致敌人正好堵在路上。
@@ -647,29 +656,55 @@ func _spawn_enemies() -> void:
 			sep = 7
 		if _enemy_target() >= 6:
 			sep = 5
-		var cands: Array = []
-		for dy in range(-3, 4):
-			for dx in range(-3, 4):
-				if dx == 0 and dy == 0:
-					continue
-				var cell: Vector2i = anchor + Vector2i(dx, dy)
-				if cell == _goal_cell or cell == START or not Maze.is_open(raw, cell) or not Maze.is_open(map, cell):
-					continue
-				var ok := true
-				for other in _enemy_cells:
-					if Vector2i(other).distance_to(cell) < sep:
-						ok = false
-						break
-				if not ok:
-					continue
-				cands.append({"cell": cell, "d": absi(dx) + absi(dy), "on_route": route.has(cell)})
-		cands.sort_custom(func(a, b):
-			if bool(a["on_route"]) != bool(b["on_route"]):
-				return not bool(a["on_route"])
-			return int(a["d"]) < int(b["d"]))
 		var best := Vector2i(-1, -1)
-		if not cands.is_empty():
-			best = cands[0]["cell"]
+		for radius in [3, 5, 7]:
+			for try_sep in [sep, 7, 5]:
+				var cands: Array = []
+				for dy in range(-radius, radius + 1):
+					for dx in range(-radius, radius + 1):
+						if dx == 0 and dy == 0:
+							continue
+						var cell: Vector2i = anchor + Vector2i(dx, dy)
+						if cell == _goal_cell or cell == START or not Maze.is_open(raw, cell) \
+								or not Maze.is_open(map, cell):
+							continue
+						var ok := true
+						for other in _enemy_cells:
+							if Vector2i(other).distance_to(cell) < try_sep:
+								ok = false
+								break
+						if not ok:
+							continue
+						cands.append({"cell": cell, "d": absi(dx) + absi(dy), "on_route": route.has(cell)})
+				cands.sort_custom(func(a, b):
+					if bool(a["on_route"]) != bool(b["on_route"]):
+						return not bool(a["on_route"])
+					return int(a["d"]) < int(b["d"]))
+				if not cands.is_empty():
+					best = cands[0]["cell"]
+					break
+			if best.x >= 0:
+				break
+		# 最后一招：整张图里挑一个离现有敌人最远、能站人的格子
+		if best.x < 0:
+			var far_cell := Vector2i(-1, -1)
+			var far_d := -1
+			for y2 in raw.size():
+				var row3: String = raw[y2]
+				for x2 in row3.length():
+					var c4 := Vector2i(x2, y2)
+					if c4 == START or c4 == _goal_cell or not Maze.is_open(map, c4):
+						continue
+					var mind := 9999
+					for other in _enemy_cells:
+						mind = mini(mind, int(Vector2i(other).distance_to(c4)))
+					if _enemy_cells.is_empty():
+						mind = 0
+					if mind > far_d:
+						far_d = mind
+						far_cell = c4
+			if far_cell.x >= 0 and far_d >= 4:
+				best = far_cell
 		if best.x >= 0:
 			_enemy_cells.append(best)
 		else:

@@ -30,6 +30,21 @@ func _ready() -> void:
 	if _should_use_test_dir():
 		save_dir = "user://saves_test"      # 自检绝不碰玩家存档
 	DirAccess.make_dir_recursive_absolute(save_dir)
+	# 自检不能继承上一次跑剩下的临时存档：清空后从零开始，
+	# 否则「上一轮捡过的碎片/通过的关卡」会影响这一轮的结果
+	if _should_use_test_dir():
+		_wipe_dir(save_dir)
+		slot_id = ""
+		level_index = 0
+		cleared = {}
+		taken = {}
+		fragments = 0
+		codex = []
+		achv = []
+		total_runs = 0
+		total_wins = 0
+		total_sonar = 0
+		total_alerts = 0
 	_load_last_or_legacy()
 
 ## 跑测试时 Godot 会把 res://tools/xxx.tscn 或 --script 的路径放进命令行参数
@@ -333,3 +348,17 @@ func _load_last_or_legacy() -> void:
 	level_index = 0
 	unlocked = 0
 	cleared = {}
+
+
+## 删除某个目录下的所有存档文件（只用于自检的临时目录）
+func _wipe_dir(path: String) -> void:
+	var d := DirAccess.open(path)
+	if d == null:
+		return
+	d.list_dir_begin()
+	var n := d.get_next()
+	while n != "":
+		if n.ends_with(".json"):
+			d.remove(n)
+		n = d.get_next()
+	d.list_dir_end()

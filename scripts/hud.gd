@@ -264,7 +264,15 @@ func _process(delta: float) -> void:
 
 	var frag_txt := ""
 	if lvl != null and lvl.has_method("fragment_cells"):
-		frag_txt = "   碎片 剩 %d/%d" % [lvl.fragment_cells().size(), lvl.fragment_total()]
+		var have := int(Progress.fragments)
+		var tier := int(Progress.upgrade_tier())
+		var next_txt := ""
+		if tier >= 3:
+			next_txt = " · 已满级"
+		else:
+			next_txt = " · 再 %d 枚升级" % maxi(1, (tier + 1) * 3 - have)
+		frag_txt = "   碎片 剩 %d/%d%s" % [lvl.fragment_cells().size(),
+			lvl.fragment_total(), next_txt]
 	_hint.text = "第 %d/%d 关   %5.1f s   声呐 %d 次%s   [空格] 声呐   %s   [C] 图鉴   [Tab] 数据   [R] 重开%s" % [
 		lvl_no, lvl_total, GameLog.elapsed(), GameLog.sonar_count, frag_txt, strong_hint, tail
 	]
