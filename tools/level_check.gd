@@ -90,6 +90,19 @@ func _check_levels() -> void:
 				reserved_ok = false
 		_check(reserved_ok, "第 %d 关箱子没压住机关" % (i + 1), "第 %d 关箱子压住了机关" % (i + 1))
 
+		# 敌人不能叠在一起
+		var cells_e: Array = []
+		var box0: Node = lv.get_node_or_null("Enemies")
+		var min_d := 999
+		if box0 != null:
+			for e0 in box0.get_children():
+				cells_e.append(Vector2i((e0.global_position / 64.0).floor()))
+			for i2 in cells_e.size():
+				for j2 in range(i2 + 1, cells_e.size()):
+					min_d = mini(min_d, int(cells_e[i2].distance_to(cells_e[j2])))
+		_check(cells_e.size() <= 1 or min_d >= 4, "第 %d 关敌人之间至少隔 %d 格" % [i + 1, min_d],
+			"第 %d 关有两个敌人叠在一起（最近 %d 格）" % [i + 1, min_d])
+
 		var box: Node = lv.get_node_or_null("Enemies")
 		var cnt := box.get_child_count() if box != null else 0
 		var expect := int(lv.ENEMY_BY_LEVEL[i])

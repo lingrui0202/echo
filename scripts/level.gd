@@ -27,11 +27,22 @@ const CELL := 64
 # 放在路线旁边的开放格上（优先不在路线上，避免堵死唯一通道）。
 # 这样玩家沿正常路线走一定会经过它们附近；地图改了也不用重对坐标。
 # 每关敌人数（索引 = 关卡序，0 起）：第 1 关没有敌人，先把“找路”练熟
-const ENEMY_BY_LEVEL := [0, 1, 1, 2, 2, 3, 3, 3, 4, 4]
+const ENEMY_BY_LEVEL := [0, 2, 3, 3, 4, 4, 5, 5, 6, 6]
 ## 每关敌人类型：0 普通 / 1 瞎子（只被强声呐惊动）/ 2 敏锐（听觉远、追得久）
-const ENEMY_KINDS := [[], [0], [2], [0, 1], [2, 1], [0, 2, 1], [0, 0, 2], [1, 2, 2], [0, 1, 2, 2], [2, 1, 1, 0]]
+const ENEMY_KINDS := [
+	[],
+	[0, 0],
+	[2, 0, 0],
+	[0, 1, 2],
+	[2, 1, 0, 0],
+	[0, 2, 1, 0],
+	[0, 0, 2, 1, 2],
+	[1, 2, 2, 0, 0],
+	[0, 1, 2, 2, 1, 0],
+	[2, 1, 1, 0, 2, 0],
+]
 const ENEMY_SEP := 10
-const ENEMY_ROUTE_FRACS := [0.22, 0.42, 0.62, 0.80]
+const ENEMY_ROUTE_FRACS := [0.16, 0.30, 0.44, 0.58, 0.72, 0.86]
 
 ## 当前关卡的地图（由 levels.gd 提供，运行时按 Progress 选）
 var map: Array = []
@@ -598,6 +609,12 @@ func _spawn_enemies() -> void:
 		var anchor: Vector2i = route[idx]
 		# 半径 3 内找候选：优先「不在最短路上」的格子（不挡唯一通道），再按距离取近的。
 		# 之前只看四邻，锚点四周全是路线时只能退回锚点，导致敌人正好堵在路上。
+		# 敌人多了以后 10 格间隔常常放不下：依次放宽到 6 / 4，避免全挤在锚点上
+		var sep := ENEMY_SEP
+		if _enemy_target() >= 5:
+			sep = 7
+		if _enemy_target() >= 6:
+			sep = 5
 		var cands: Array = []
 		for dy in range(-3, 4):
 			for dx in range(-3, 4):
@@ -608,7 +625,7 @@ func _spawn_enemies() -> void:
 					continue
 				var ok := true
 				for other in _enemy_cells:
-					if Vector2i(other).distance_to(cell) < ENEMY_SEP:
+					if Vector2i(other).distance_to(cell) < sep:
 						ok = false
 						break
 				if not ok:
