@@ -199,7 +199,34 @@ func _check_enemy_edges() -> void:
 		_check(not (e.get("_path") as Array).is_empty() or behind == door_cell,
 			"开门后敌人重新算出路径", "开门后还是没有路径")
 
-	# 6) 巡逻：跑一会儿应该真的移动过
+	# 6) 强声呐收益：近处敌人被震住、范围内显形
+	var e2: Node = box.get_child(0)
+	e2.set("_has_target", false)
+	lv.call("_strong_impact", e2.global_position)
+	_check(float(e2.get("_stun_t")) > 0.5, "强声呐把近处敌人震住", "近处敌人没被震住")
+	_check(float(e2.get("_expose_t")) > 1.0, "强声呐让敌人显形", "敌人没有显形")
+	var p0b: Vector2 = e2.global_position
+	for i in 10:
+		e2.call("_physics_process", 0.05)
+	_check(e2.global_position.distance_to(p0b) < 2.0, "被震住时敌人不动",
+		"被震住还在动：%.1f px" % e2.global_position.distance_to(p0b))
+
+	# 7) 心跳：900 px 内会开始累积节拍，更远不响
+	var hud: Node = lv.get_node("HUD")
+	var pl: Node2D = lv.get_node("Player")
+	hud.set("_player", pl)
+	pl.global_position = Vector2(10 * 64 + 32, 10 * 64 + 32)
+	e2.global_position = pl.global_position + Vector2(700, 0)
+	hud.set("_beat_t", 0.0)
+	hud.call("_update_heartbeat", 0.2)
+	var near_beat: float = float(hud.get("_beat_t"))
+	_check(near_beat > 0.0, "700 px 内有心跳", "700 px 听不到心跳")
+	e2.global_position = pl.global_position + Vector2(1100, 0)
+	hud.set("_beat_t", 0.0)
+	hud.call("_update_heartbeat", 0.2)
+	_check(float(hud.get("_beat_t")) == 0.0, "1100 px 外没有心跳", "太远还在响")
+
+	# 8) 巡逻：跑一会儿应该真的移动过
 	e.set("_has_target", false)
 	e.set("_searching", false)
 	e.set("_patrol_left", 0.0)

@@ -122,7 +122,7 @@ func clear_memory() -> void:
 func emit_at(world_pos: Vector2, strong: bool = false, suppressed: bool = false) -> void:
 	_strong = strong
 	_speed = RING_SPEED * (1.45 if strong else 1.0)
-	_dur = DURATION * (1.25 if strong else 1.0)
+	_dur = DURATION * (1.5 if strong else 1.0)
 	if suppressed:
 		# 静音区里回声只走得动一点点，也传不出去
 		_speed *= 0.45

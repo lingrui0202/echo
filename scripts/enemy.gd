@@ -54,6 +54,8 @@ var _player: Node2D = null
 var _glow: PointLight2D = null
 var _pulse := 0.0
 var _icon: Node2D
+var _stun_t := 0.0      # 被强声呐震住的剩余时间
+var _expose_t := 0.0    # 被声呐照亮、强制显形的剩余时间
 
 var _lost := 0.0
 var _search_left := 0.0
@@ -91,7 +93,7 @@ func _process(delta: float) -> void:
 		_icon.global_position = global_position
 		var player := get_tree().get_first_node_in_group("player")
 		var near := player != null and global_position.distance_to(player.global_position) < 210.0
-		_icon.visible = near or _has_target or _searching
+		_icon.visible = near or _has_target or _searching or _expose_t > 0.0
 
 func setup(rows: Array, cell_px: float, home: Vector2i, enemy_kind: int = KIND_NORMAL) -> void:
 	_rows = rows
@@ -155,7 +157,26 @@ func is_chasing() -> bool:
 func is_searching() -> bool:
 	return _searching
 
+## 强声呐在近处会把敌人震住一会儿（这就是它的收益：能脱身）
+func stun(sec: float) -> void:
+	_stun_t = maxf(_stun_t, sec)
+	velocity = Vector2.ZERO
+
+## 被声呐扫到：强制显形几秒
+func expose(sec: float) -> void:
+	_expose_t = maxf(_expose_t, sec)
+
+
 func _physics_process(delta: float) -> void:
+	_stun_t = maxf(0.0, _stun_t - delta)
+	_expose_t = maxf(0.0, _expose_t - delta)
+	if _stun_t > 0.0:
+		velocity = Vector2.ZERO
+		move_and_slide()
+		if _icon != null:
+			_icon.visible = true
+		return
+
 	if _player == null:
 		_player = get_tree().get_first_node_in_group("player")
 

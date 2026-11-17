@@ -483,12 +483,13 @@ func _update_heartbeat(delta: float) -> void:
 	var best := INF
 	for e in box.get_children():
 		best = minf(best, _player.global_position.distance_to(e.global_position))
-	if best > 520.0:
+	if best > 900.0:
 		_beat_t = 0.0
 		return
 	if _paused_by_panel:
 		return
-	var interval := lerpf(1.25, 0.32, 1.0 - best / 520.0)
+	# 900 px 内开始有心跳，越近越密（原来 520 px 起，很多关根本听不到）
+	var interval := lerpf(1.35, 0.30, clampf(1.0 - best / 900.0, 0.0, 1.0))
 	_beat_t += delta
 	if _beat_t >= interval:
 		_beat_t = 0.0

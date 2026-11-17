@@ -6,7 +6,7 @@ const IconArt = preload("res://scripts/icon_art.gd")
 
 const SPEED := 235.0
 const SONAR_COOLDOWN := 1.8     # ← 报告里的核心实验变量
-const STRONG_COOLDOWN := 6.0    # 强声呐：范围大、惊动全场，所以冷却长得多
+const STRONG_COOLDOWN := 5.0    # 强声呐：范围大、惊动全场，所以冷却长得多
 
 # 常亮光圈：只要"看得见边界的一小圈"，看不见下一个格子。
 # 第 5 周试玩反馈：太亮 → 压到 0.015 的 CanvasModulate；随后要求"周围一圈要可见"，

@@ -167,6 +167,8 @@ func emit_wave(p: Vector2, strong: bool = false) -> void:
 		_wave.emit_at(p, strong, silent)
 	if not silent:
 		_alarm(p, strong)        # 静音区里发声，敌人听不见
+		if strong:
+			_strong_impact(p)
 
 func _build() -> void:
 	_clear_map()
@@ -840,6 +842,19 @@ func _enemy_target() -> int:
 
 
 ## 声呐广播：听觉穿墙，不做视线判定。被惊动的数量记进遥测（HUD 会闪一下提示）。
+## 强声呐的收益：近处敌人被震住、范围内敌人显形一会儿
+func _strong_impact(origin: Vector2) -> void:
+	var box := get_node_or_null("Enemies")
+	if box == null:
+		return
+	for e in box.get_children():
+		var d := origin.distance_to(e.global_position)
+		if d <= 300.0 and e.has_method("stun"):
+			e.call("stun", 1.2)
+		if d <= 760.0 and e.has_method("expose"):
+			e.call("expose", 3.0)
+
+
 ## strong = 强声呐：不管多远，全场敌人都听见。
 func _alarm(p: Vector2, strong: bool = false) -> void:
 	var enemies := get_node_or_null("Enemies")
