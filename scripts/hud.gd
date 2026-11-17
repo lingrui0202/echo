@@ -518,7 +518,7 @@ func _update_settings_panel() -> void:
 		_reload_level()
 	elif Input.is_action_just_pressed("slot_7"):
 		Session.quit_to_menu()
-	_settings_text.text = "设  置\n\n%s\n\n[1] 亮度    [2] 音量    [3] 声呐配色\n\n%s\n\n[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n[C] 打开图鉴    ·    Esc 关闭" % [
+	_settings_text.text = "暂  停（游戏已暂停）\n\n%s\n\n[1] 亮度    [2] 音量    [3] 声呐配色    [F11] 全屏\n\n%s\n\n[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n[C] 打开图鉴    ·    Esc 继续游戏" % [
 		Settings.describe(), _save_summary()
 	]
 
@@ -573,7 +573,7 @@ func _show_result(reason: String) -> void:
 		extra = "\n" + extra
 
 	var par := GameLog.par_seconds(int((r.get("config", {}) as Dictionary).get("route_len", 120)))
-	_result_text.text = "%s        评价 %s\n\n用时 %.1f s（目标 %.0f s）  声呐 %d 次  被听见 %d 次\n走过 %d 格（进入 %d 次）\n重复率 %.0f %%\n%s\n\n按 R 再试一次" % [
+	_result_text.text = "%s        评价 %s\n\n用时 %.1f s（目标 %.0f s）  声呐 %d 次  被听见 %d 次\n走过 %d 格（进入 %d 次）\n重复率 %.0f %%\n%s\n\n[R] 再试一次    [Esc] 菜单（暂停）" % [
 		title, grade, mine, par, int(r.get("sonar_presses", 0)), int(r.get("alerts", 0)),
 		cells, entries, revisit * 100.0, extra,
 	]

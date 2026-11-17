@@ -27,6 +27,20 @@ func _ready() -> void:
 	_bind("restart", [KEY_R])
 	_bind("stats", [KEY_TAB])
 
+## F11：全屏 / 窗口切换（演示、投影时用；不写进设置文件）
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo \
+			and (event as InputEventKey).physical_keycode == KEY_F11:
+		var win := get_window()
+		if win == null:
+			return
+		if win.mode == Window.MODE_FULLSCREEN:
+			win.mode = Window.MODE_WINDOWED
+		else:
+			win.mode = Window.MODE_FULLSCREEN
+		get_viewport().set_input_as_handled()
+
+
 func _bind(action: StringName, keys: Array) -> void:
 	if InputMap.has_action(action):
 		InputMap.erase_action(action)
