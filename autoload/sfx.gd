@@ -14,7 +14,7 @@ func _ready() -> void:
 	_add("caught", _tone(140.0, 0.6, 0.6, 70.0))
 	_add("win", _tone(660.0, 0.45, 0.4, 990.0))
 	# 心跳：低频、很短，靠间隔表达"还有多远"
-	_add("heart", _heart_tone())
+	_add("heart", _tone(58.0, 0.15, 0.88, 42.0))
 	_add("frag", _tone(1046.0, 0.30, 0.35, 1568.0))
 	_add("step", _tone(180.0, 0.07, 0.18, 120.0))
 	_add("hit", _tone(90.0, 0.35, 0.55, 55.0))
@@ -36,44 +36,6 @@ func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> Audio
 	w.stereo = false
 	w.data = data
 	return w
-
-## 心跳：两下"咚咚"。
-## 低频 58 Hz 是耳机里的"沉"，但笔记本外放几乎发不出 150 Hz 以下，
-## 所以再叠 116 Hz 与 232 Hz 两层谐波——同一个音，在两种设备上都能听见。
-func _heart_tone() -> AudioStreamWAV:
-	var dur := 0.46
-	var n := int(RATE * dur)
-	var data := PackedByteArray()
-	data.resize(n * 2)
-	var beats := [[0.0, 1.0], [0.17, 0.70]]
-	var peak := 0.0
-	var buf := PackedFloat32Array()
-	buf.resize(n)
-	for i in n:
-		var t := float(i) / float(RATE)
-		var v := 0.0
-		for b in beats:
-			var t0: float = b[0]
-			var gain: float = b[1]
-			var dt := t - t0
-			if dt < 0.0 or dt > 0.20:
-				continue
-			var env := exp(-13.0 * dt) * (1.0 - exp(-120.0 * dt))
-			v += (sin(TAU * 58.0 * dt) * 0.80
-				+ sin(TAU * 116.0 * dt) * 0.30
-				+ sin(TAU * 232.0 * dt) * 0.34) * env * gain
-		buf[i] = v
-		peak = maxf(peak, absf(v))
-	var norm := 0.92 / maxf(peak, 0.001)
-	for i in n:
-		data.encode_s16(i * 2, int(clampf(buf[i] * norm, -1.0, 1.0) * 32767.0))
-	var w := AudioStreamWAV.new()
-	w.format = AudioStreamWAV.FORMAT_16_BITS
-	w.mix_rate = RATE
-	w.stereo = false
-	w.data = data
-	return w
-
 
 ## 循环低频环境音
 func _loop_tone(freq: float, dur: float, amp: float) -> AudioStreamWAV:
