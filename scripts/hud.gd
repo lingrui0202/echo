@@ -52,6 +52,7 @@ func _panel_style() -> StyleBoxFlat:
 ## 面板打开时暂停，但 HUD 自己要继续跑（否则按 Esc/C 关不掉）
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	layer = 100          # 面板/提示永远在进关标题卡（layer 90）之上
 	var bar := ColorRect.new()
 	bar.color = Color(0.02, 0.03, 0.05, 0.55)
 	bar.position = Vector2(0, 0)
@@ -354,6 +355,11 @@ func _update_pick_panel() -> void:
 		_pick.visible = false
 		return
 	_pick.visible = true
+	var lv := get_parent()
+	if lv != null:
+		var intro := lv.get_node_or_null("IntroCard")
+		if intro != null:
+			intro.queue_free()      # 词条面板和标题卡不能同时占屏
 	if Input.is_action_just_pressed("slot_1"):
 		Mods.pick(0)
 		return

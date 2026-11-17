@@ -59,6 +59,28 @@ func _ready() -> void:
 	await _tap("codex")
 	_check(not get_tree().paused, "C 关闭图鉴后恢复", "关掉图鉴没有恢复")
 
+	# 标题卡：暂停时也要照常淡出，不能盖住整屏
+	var intro: Node = lv.get_node_or_null("IntroCard")
+	_check(intro != null, "进关有标题卡", "没有标题卡")
+	get_tree().paused = true
+	await get_tree().create_timer(2.6, true).timeout   # process_always：暂停中也计时
+	var gone: bool = lv.get_node_or_null("IntroCard") == null
+	get_tree().paused = false
+	_check(gone, "暂停时标题卡仍会淡出消失", "暂停时标题卡卡住不消失")
+
+	# 词条面板一出现，标题卡就该被收掉（否则两层面板叠在一起）
+	var mods := get_node_or_null("/root/Mods")
+	mods.set("pending", true)
+	await get_tree().process_frame
+	var hud2: Node = lv.get_node("HUD")
+	var still: bool = lv.get_node_or_null("IntroCard") != null
+	mods.set("pending", false)
+	await get_tree().process_frame
+	_check(not still, "词条面板出现时标题卡被收掉", "标题卡和词条面板叠在一起")
+	var card_layer := 90
+	_check(int(hud2.layer) > card_layer, "HUD 层级高于标题卡（%d > %d）" % [int(hud2.layer), card_layer],
+		"HUD 层级没高于标题卡")
+
 	# 走到出口（结算面板）不应该暂停
 	player.call("win")
 	await get_tree().process_frame

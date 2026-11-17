@@ -902,6 +902,9 @@ func _map_layer() -> Node2D:
 func _show_intro_card() -> void:
 	if Engine.is_editor_hint():
 		return
+		# 这一关要先选词条时不放标题卡：否则卡和词条面板会叠在一起
+	if Mods.pending:
+		return
 	var old := get_node_or_null("IntroCard")
 	if old != null:
 		remove_child(old)
@@ -943,6 +946,7 @@ func _show_intro_card() -> void:
 
 	# 淡入：黑场 0.45 秒化开，标题停 1.4 秒再淡出
 	var t := create_tween()
+	t.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)   # 选词条会暂停游戏，标题仍要淡出
 	t.set_parallel(false)
 	t.tween_property(black, "color:a", 0.0, 0.45)
 	t.tween_interval(1.15)
