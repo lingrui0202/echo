@@ -575,6 +575,7 @@ func _update_reveals(player_cell: Vector2i) -> void:
 			node.modulate.a = 1.0
 			if cell == _goal_cell:
 				_goal_revealed = true
+				Codex.unlock("goal")   # 第一次看见出口才在图鉴里解锁（避免每关开局弹提示）
 
 
 func _is_revealed(node: Node2D) -> bool:
@@ -959,7 +960,7 @@ func _show_intro_card() -> void:
 	layer.add_child(title)
 
 	var sub := Label.new()
-	sub.text = "%d × %d    %s" % [String(Levels.MAPS[level_index][0]).length(),
+	sub.text = "目标：找到绿色出口   ·   %d × %d   ·   %s" % [String(Levels.MAPS[level_index][0]).length(),
 		Levels.MAPS[level_index].size(), _intro_hint()]
 	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", Color(0.66, 0.78, 0.92))
@@ -1073,7 +1074,6 @@ func _add_goal(cx: int, cy: int) -> void:
 
 	# 出口从一开局就以“淡淡的绿光”存在（否则玩家在黑里根本不知道目标在哪），
 	# 被声呐扫到或走近之后转为全亮
-	Codex.unlock("goal")      # 出口一进关就可见，图鉴里同步解锁
 	var vis := _add_reveal("goal", Vector2i(cx, cy), float(CELL) * 0.9)
 	vis.visible = true
 	vis.modulate.a = 0.38
