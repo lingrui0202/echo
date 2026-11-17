@@ -25,6 +25,10 @@ func _ready() -> void:
 	add_child(lv)
 	await get_tree().process_frame
 	var player: Node2D = lv.get_node("Player")
+	# 自检运行（tools/）不该弹词条面板，否则一上来就被暂停
+	var mods0 := get_node_or_null("/root/Mods")
+	_check(not bool(mods0.get("pending")), "自检运行不要求选词条", "自检里弹出了词条面板")
+	_check(not get_tree().paused, "自检运行一开始没有被暂停", "自检一开始就处于暂停")
 	get_node_or_null("/root/Mods").set("pending", false)
 
 	# 打开设置

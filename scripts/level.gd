@@ -102,9 +102,9 @@ func _ready() -> void:
 		cm.color = Settings.dark_color()
 		add_child(cm)
 		move_child(cm, 0)
-	if Session.is_test():
+	if Session.is_test() or _is_tool_run():
 		Mods.current = ""
-		Mods.pending = false        # 测试模式不发词条
+		Mods.pending = false        # 测试模式 / 自检都不发词条
 	else:
 		Mods.reset_for_level(level_index)
 	_build()
@@ -129,7 +129,7 @@ func restart(idx: int = -1) -> void:
 		idx = Progress.level_index
 	level_index = clampi(idx, 0, Levels.MAPS.size() - 1)
 	map = Levels.MAPS[level_index].duplicate()
-	if Session.is_test():
+	if Session.is_test() or _is_tool_run():
 		Mods.current = ""
 		Mods.pending = false        # 测试模式换关也不发词条
 	else:
@@ -787,6 +787,14 @@ func push_crate(cell: Vector2i, dir: Vector2i) -> bool:
 	body.position = Vector2(to.x * CELL + CELL * 0.5, to.y * CELL + CELL * 0.5)
 	_crates[to] = body
 	return true
+
+
+## 跑 tools/ 下的自检时也当测试模式：不发词条、不暂停
+func _is_tool_run() -> bool:
+	for a in OS.get_cmdline_args():
+		if a == "--test" or a.contains("res://tools/"):
+			return true
+	return false
 
 
 func _enemy_target() -> int:
