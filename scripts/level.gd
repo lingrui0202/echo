@@ -1073,6 +1073,7 @@ func _add_goal(cx: int, cy: int) -> void:
 
 	# 出口从一开局就以“淡淡的绿光”存在（否则玩家在黑里根本不知道目标在哪），
 	# 被声呐扫到或走近之后转为全亮
+	Codex.unlock("goal")      # 出口一进关就可见，图鉴里同步解锁
 	var vis := _add_reveal("goal", Vector2i(cx, cy), float(CELL) * 0.9)
 	vis.visible = true
 	vis.modulate.a = 0.38
