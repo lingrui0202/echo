@@ -23,6 +23,7 @@ func _ready() -> void:
 	_bind("codex", [KEY_C])
 	_bind("page_prev", [KEY_LEFT])
 	_bind("page_next", [KEY_RIGHT])
+	_bind("confirm", [KEY_ENTER, KEY_KP_ENTER])
 	_bind("restart", [KEY_R])
 	_bind("stats", [KEY_TAB])
 

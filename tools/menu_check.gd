@@ -208,6 +208,42 @@ func _ready() -> void:
 		"加载面板显示槽的关卡与进度", "加载面板没显示进度：%s" % save_txt.left(90))
 	_check(save_txt.contains(":"), "加载面板显示保存时间", "加载面板没有时间")
 
+	# ---- 光标选择：↑↓ 移动，Enter 载入 ----
+	# 先保证列表里至少两个槽（只有一条时光标没有可移动的目标）
+	prog.call("new_save")
+	prog.call("save_now")
+	menu.set("_mode", "save")
+	menu.call("_refresh_panel")
+	await get_tree().process_frame
+	_check(String(menu.get("_panel_text").text).contains("▶"), "存档面板有选中标记",
+		"没有选中标记：%s" % String(menu.get("_panel_text").text).left(60))
+	menu.set("_sel", 0)
+	await _tap("move_down")
+	_check(int(menu.get("_sel")) == 1, "↑↓ 能移动存档光标", "光标没动：%d" % int(menu.get("_sel")))
+	await _tap("move_up")
+	_check(int(menu.get("_sel")) == 0, "↑ 能把光标移回去", "光标回不去：%d" % int(menu.get("_sel")))
+
+	# ---- 测试面板：10 关都能选，0 = 第 10 关 ----
+	menu.set("_mode", "test")
+	menu.call("_refresh_panel")
+	await get_tree().process_frame
+	var test_txt: String = String(menu.get("_panel_text").text)
+	var listed := 0
+	for line in test_txt.split("\n"):
+		if line.strip_edges().begins_with("▶") or line.strip_edges().substr(0, 2).strip_edges().is_valid_int():
+			listed += 1
+	_check(listed >= 10, "测试面板列出十关（%d 行）" % listed, "测试面板只列了 %d 关" % listed)
+	_check(test_txt.contains("0 = 第 10 关"), "测试面板说明 0 代表第 10 关", "没有说明 0 键")
+	menu.set("_sel", 0)
+	await _tap("move_down")
+	_check(int(menu.get("_sel")) == 1, "测试面板光标能移动", "测试光标没动")
+	menu.set("_sel", 9)
+	_check(int(menu.get("_sel")) == 9 and Progress.TOTAL == 10, "光标能到第 10 关",
+		"光标到不了第 10 关")
+	menu.set("_mode", "")
+	menu.call("_refresh_panel")
+	await get_tree().process_frame
+
 	_clean_dir("user://saves_test")
 
 	# ---- 开新存档不影响排行榜（runs.json 是另一份数据）----
@@ -252,3 +288,13 @@ func _clean_dir(path: String) -> void:
 func _finish() -> void:
 	print("---- %d 项通过，%d 项失败" % [_pass, _fails.size()])
 	get_tree().quit(0 if _fails.is_empty() else 1)
+
+
+## 按一下某个动作（按两帧再松开）
+func _tap(action: String) -> void:
+	Input.action_press(action)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	Input.action_release(action)
+	await get_tree().process_frame
+	await get_tree().process_frame

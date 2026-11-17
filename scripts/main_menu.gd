@@ -18,6 +18,7 @@ var _last_mode := ""
 var _page := 0
 var _delete_mode := false
 var _delete_armed := ""
+var _sel := 0          # 当前光标（存档列表内 / 测试关卡号）
 
 func _ready() -> void:
 	# 背景：上深下更深的线性渐变 + 四周暗角
@@ -151,6 +152,11 @@ func _ready_shot() -> void:
 	await get_tree().process_frame
 	get_viewport().get_texture().get_image().save_png("res://_verify/menu_save.png")
 	print("[menu] _verify/menu_save.png")
+	_mode = "test"
+	await get_tree().process_frame
+	await get_tree().process_frame
+	get_viewport().get_texture().get_image().save_png("res://_verify/menu_test.png")
+	print("[menu] _verify/menu_test.png")
 	_mode = "codex"
 	await get_tree().process_frame
 	await get_tree().process_frame
@@ -246,48 +252,123 @@ func _when(ts: float) -> String:
 	return "%02d-%02d %02d:%02d" % [d["month"], d["day"], d["hour"], d["minute"]]
 
 
-## 加载存档：按下 1–N 载入第 N 个槽
+## 加载存档：↑↓ 选、回车载入；数字键作为快捷方式
 func _pick_save() -> void:
 	var start := _page * 9
+	var count := clampi(_save_list.size() - start, 0, 9)
 	for k in 9:
 		var i := start + k
 		if i >= _save_list.size():
 			break
 		if Input.is_action_just_pressed("slot_%d" % (k + 1)):
-			var id := String((_save_list[i] as Dictionary)["id"])
-			if Progress.load_save(id):
-				Session.start_campaign(false)
+			_sel = k
+			_do_load(i)
 			return
+	if count == 0:
+		return
+	_sel = clampi(_sel, 0, count - 1)
+	if Input.is_action_just_pressed("move_up"):
+		_sel = (_sel - 1 + count) % count
+	if Input.is_action_just_pressed("move_down"):
+		_sel = (_sel + 1) % count
+	if Input.is_action_just_pressed("confirm"):
+		_do_load(start + _sel)
 
 
-## 删除模式：按同一个数字两次才删（防手滑）
+func _do_load(i: int) -> void:
+	if i < 0 or i >= _save_list.size():
+		return
+	var id := String((_save_list[i] as Dictionary)["id"])
+	if Progress.load_save(id):
+		Session.start_campaign(false)
+
+
+## 删除模式：光标 + 回车，连按两次回车才删（防手滑）
 func _pick_delete() -> void:
 	var start := _page * 9
+	var count := clampi(_save_list.size() - start, 0, 9)
 	for k in 9:
 		var i := start + k
 		if i >= _save_list.size():
 			break
 		if Input.is_action_just_pressed("slot_%d" % (k + 1)):
-			var id := String((_save_list[i] as Dictionary)["id"])
-			if _delete_armed == id:
-				Progress.delete_save(id)
-				_delete_armed = ""
-			else:
-				_delete_armed = id
+			_sel = k
+			_arm_delete(i)
 			return
+	if count == 0:
+		return
+	_sel = clampi(_sel, 0, count - 1)
+	if Input.is_action_just_pressed("move_up"):
+		_sel = (_sel - 1 + count) % count
+	if Input.is_action_just_pressed("move_down"):
+		_sel = (_sel + 1) % count
+	if Input.is_action_just_pressed("confirm"):
+		_arm_delete(start + _sel)
 
 
-## 面板里按下 1–5 → 进对应关卡
+func _arm_delete(i: int) -> void:
+	if i < 0 or i >= _save_list.size():
+		return
+	var id := String((_save_list[i] as Dictionary)["id"])
+	if _delete_armed == id:
+		Progress.delete_save(id)
+		_delete_armed = ""
+		_sel = 0
+	else:
+		_delete_armed = id
+
+
+## 选关：↑↓ 或 ←→ 选、回车开始；数字 1–9 直接进对应关，0 = 第 10 关
 func _pick_level(for_test: bool) -> bool:
-	for k in Progress.TOTAL:
+	var total := Progress.TOTAL
+	for k in 9:
 		if Input.is_action_just_pressed("slot_%d" % (k + 1)):
-			if for_test:
-				Session.start_test(k)
-			else:
-				Progress.select_level(k)
-				Session.start_campaign(false)
-			return true
+			return _start_level(k, for_test)
+	if Input.is_action_just_pressed("slot_0"):
+		return _start_level(9, for_test)
+
+	_sel = clampi(_sel, 0, total - 1)
+	if Input.is_action_just_pressed("move_up") or Input.is_action_just_pressed("page_prev"):
+		_sel = (_sel - 1 + total) % total
+	if Input.is_action_just_pressed("move_down") or Input.is_action_just_pressed("page_next"):
+		_sel = (_sel + 1) % total
+	if Input.is_action_just_pressed("confirm"):
+		return _start_level(_sel, for_test)
 	return false
+
+
+func _start_level(idx: int, for_test: bool) -> bool:
+	if idx < 0 or idx >= Progress.TOTAL:
+		return false
+	_sel = idx
+	if for_test:
+		Session.start_test(idx)
+	else:
+		Progress.select_level(idx)
+		Session.start_campaign(false)
+	return true
+
+## 一关的简短说明：敌人数 + 有哪些机关
+func _level_brief(i: int) -> String:
+	var lm: Array = Levels.MAPS[i]
+	var body := "".join(lm)
+	var bits: Array = []
+	var enemies := 0
+	if LevelScript.ENEMY_BY_LEVEL.size() > i:
+		enemies = int(LevelScript.ENEMY_BY_LEVEL[i])
+	bits.append("敌 %d" % enemies)
+	if body.count("D") > 0:
+		bits.append("门")
+	if body.count("K") > 0:
+		bits.append("钥匙")
+	if body.count("P") > 0:
+		bits.append("压力板")
+	if body.count("X") > 0:
+		bits.append("静音区")
+	if body.count("D") == 0 and body.count("K") == 0 and body.count("P") == 0 and body.count("X") == 0:
+		bits.append("纯探索")
+	return " · ".join(bits)
+
 
 func _refresh_panel() -> void:
 	var scroll := _panel.get_child(0) as ScrollContainer
@@ -322,26 +403,36 @@ func _refresh_panel() -> void:
 				if bool(sv["finished"]):
 					tag = "已全部通关"
 				var mark := " "
-				if _delete_mode and _delete_armed == String(sv["id"]):
-					mark = "!"
+				if _delete_mode:
+					if _delete_armed == String(sv["id"]):
+						mark = "!"
+				elif k == _sel:
+					mark = "▶"
 				lines += "%s[%d]  %s 创建   第 %d 关   %s\n" % [
 					mark, k + 1, _when(float(sv.get("created", sv["updated"]))),
 					int(sv["level"]) + 1, tag]
 			if _delete_mode:
-				lines += "\n⚠ 按同一个数字两次即删除该存档"
+				lines += "\n⚠ 选中后连按两次 Enter 才删除"
 			else:
-				lines += "\n按 1–9 载入   左右方向键翻页   按 0 删除存档"
+				lines += "\n↑↓ 选择   Enter 载入   0 删除存档   左右翻页"
 			_panel_text.text = lines
 			if _delete_mode:
 				_pick_delete()
 			else:
 				_pick_save()
 		"test":
-			_panel_text.text = ("测试模式（Esc 返回）\n\n" +
-				"· 5 关全部开放\n" +
-				"· 不发词条\n" +
-				"· 不写存档、不影响正式进度\n\n" +
-				"按 1–5 进入对应关卡")
+			_sel = clampi(_sel, 0, Progress.TOTAL - 1)
+			var rows := ""
+			for i in Progress.TOTAL:
+				var lm: Array = Levels.MAPS[i]
+				var w := String(lm[0]).length()
+				var cur := "▶" if i == _sel else "  "
+				rows += "%s %2d   %2d×%2d   %s\n" % [cur, i + 1, w, lm.size(), _level_brief(i)]
+			_panel_text.text = ("测试模式（Esc 返回）\n\n"
+				+ "· 十关全部开放    · 不发词条\n"
+				+ "· 不写存档、不影响正式进度\n\n"
+				+ rows
+				+ "\n↑↓ 选择   Enter 开始   1–9 直选（0 = 第 10 关）")
 			_pick_level(true)
 		"rank":
 			_panel_text.text = _rank_text()
@@ -399,3 +490,5 @@ func _rank_text() -> String:
 				k + 1, float(r.get("duration_s", 0.0)), String(r.get("grade", "-")),
 				int(r.get("sonar_presses", 0))]
 	return lines
+const Levels = preload("res://scripts/levels.gd")
+const LevelScript = preload("res://scripts/level.gd")
