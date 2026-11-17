@@ -441,9 +441,14 @@ func _refresh_panel() -> void:
 		"daily":
 			var lv: int = (get_node_or_null("/root/Session") as Node).call("daily_level")
 			var best: float = GameLog.call("today_best", lv)
+			var tries: int = GameLog.call("daily_attempts", lv)
 			var best_txt := "今天还没通关" if best == INF else "今天最好 %.1f s" % best
-			_panel_text.text = "每日挑战（Esc 返回）\n\n今天是第 %d 关\n%s\n\n按 1 开始" % [
-				lv + 1, best_txt]
+			var tries_txt := "今天还没玩过" if tries <= 0 else "今天已挑战 %d 次" % tries
+			_panel_text.text = ("每日挑战（Esc 返回）\n\n"
+				+ "今天是第 %d 关\n%s\n%s\n\n"
+				+ "· 每天换一关，进度与正式存档互不影响\n"
+				+ "· 再玩一次会刷新今天的纪录\n\n"
+				+ "按 1 开始") % [lv + 1, best_txt, tries_txt]
 			if Input.is_action_just_pressed("slot_1"):
 				(get_node_or_null("/root/Session") as Node).call("start_daily")
 		"settings":

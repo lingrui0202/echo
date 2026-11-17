@@ -544,9 +544,11 @@ func _update_settings_panel() -> void:
 		_reload_level()
 	elif Input.is_action_just_pressed("slot_7"):
 		Session.quit_to_menu()
-	_settings_text.text = "暂  停（游戏已暂停）\n\n%s\n\n[1] 亮度    [2] 音量    [3] 声呐配色    [F11] 全屏\n\n%s\n\n[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n[C] 打开图鉴    ·    Esc 继续游戏" % [
-		Settings.describe(), _save_summary()
-	]
+	_settings_text.text = ("暂  停（游戏已暂停）\n\n%s\n\n"
+		+ "操作：WASD 移动    空格 声呐    E 强声呐    C 图鉴    Tab 数据    R 重开    Esc 暂停    F11 全屏\n\n"
+		+ "[1] 亮度    [2] 音量    [3] 声呐配色\n\n%s\n\n"
+		+ "[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n"
+		+ "Esc 继续游戏") % [Settings.describe(), _save_summary()]
 
 
 ## 每帧把玩家所在格喂给小地图（重复的格子内部会忽略）

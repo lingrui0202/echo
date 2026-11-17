@@ -215,6 +215,21 @@ func history_size() -> int:
 
 
 ## 今天这一关的每日挑战最好成绩
+## 今天在某一关的每日挑战里跑过几次（含没通关的）
+func daily_attempts(level_idx: int) -> int:
+	var today := Time.get_datetime_string_from_system().substr(0, 10)
+	var n := 0
+	for r in _runs:
+		if String(r.get("mode", "")) != "daily":
+			continue
+		if String(r.get("when", "")).substr(0, 10) != today:
+			continue
+		if int((r.get("config", {}) as Dictionary).get("level_index", -1)) != level_idx:
+			continue
+		n += 1
+	return n
+
+
 func today_best(level_idx: int) -> float:
 	var today := Time.get_datetime_string_from_system().substr(0, 10)
 	var best := INF

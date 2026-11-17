@@ -49,6 +49,11 @@ func _ready() -> void:
 		var emoved: float = enemies[0].global_position.distance_to(e0)
 		_check(emoved < 1.0, "暂停时敌人不动（位移 %.1f px）" % emoved, "暂停时敌人还在动：%.1f px" % emoved)
 
+	# 暂停面板里要有操作说明，新手中途能查
+	var ptxt: String = String((lv.get_node("HUD").get("_settings_text") as Label).text)
+	_check(ptxt.contains("WASD") and ptxt.contains("空格") and ptxt.contains("F11"),
+		"暂停面板列出操作说明", "暂停面板没有操作说明：%s" % ptxt.left(60))
+
 	# 关闭设置
 	await _tap("settings")
 	_check(not get_tree().paused, "Esc 关闭设置后恢复", "关掉设置没有恢复")

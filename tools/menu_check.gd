@@ -244,6 +244,33 @@ func _ready() -> void:
 	menu.call("_refresh_panel")
 	await get_tree().process_frame
 
+	# ---- 每日挑战面板：显示今天挑战了几次 ----
+	var gl := get_node_or_null("/root/GameLog")
+	var lv_idx: int = (get_node_or_null("/root/Session") as Node).call("daily_level")
+	var before_tries: int = int(gl.call("daily_attempts", lv_idx))
+	gl.set("persist", false)
+	# 直接塞一条今日 daily 记录（end_session 受 3 秒垃圾过滤影响，这里只验查询与展示）
+	var today := Time.get_datetime_string_from_system().substr(0, 10)
+	var runs: Array = gl.get("_runs")
+	runs.append({
+		"when": today + "T12:00:00", "reason": "win", "duration_s": 12.0,
+		"mode": "daily", "grade": "A",
+		"config": {"level_index": lv_idx},
+	})
+	await get_tree().process_frame
+	_check(int(gl.call("daily_attempts", lv_idx)) == before_tries + 1,
+		"每日挑战次数会累加", "次数没累加")
+	gl.set("mode_tag", "")
+	menu.set("_mode", "daily")
+	menu.call("_refresh_panel")
+	await get_tree().process_frame
+	var daily_txt2: String = String(menu.get("_panel_text").text)
+	_check(daily_txt2.contains("已挑战") or daily_txt2.contains("还没玩过"),
+		"每日面板显示今天是否玩过", "每日面板没有次数提示：%s" % daily_txt2.left(80))
+	menu.set("_mode", "")
+	menu.call("_refresh_panel")
+	await get_tree().process_frame
+
 	_clean_dir("user://saves_test")
 
 	# ---- 开新存档不影响排行榜（runs.json 是另一份数据）----
