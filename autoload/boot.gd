@@ -9,6 +9,7 @@ func _ready() -> void:
 	_bind("move_down", [KEY_S, KEY_DOWN])
 	_bind("sonar", [KEY_SPACE])
 	_bind("strong_sonar", [KEY_E])
+	_bind("resonance", [KEY_Q])
 	_bind("settings", [KEY_ESCAPE])
 	_bind("slot_1", [KEY_1])
 	_bind("slot_2", [KEY_2])

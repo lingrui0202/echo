@@ -17,11 +17,11 @@ const Maze = preload("res://scripts/maze.gd")
 const LightFactory = preload("res://scripts/light_factory.gd")
 const IconArt = preload("res://scripts/icon_art.gd")
 
-const HEAR_RADIUS := 700.0      # px，约 11 格
-const SPEED := 168.0            # px/s：玩家 235，直线跑得掉，但拐弯会被抄近路
-const CHASE_TIME := 5.5         # 听到后追多久
+const HEAR_RADIUS := 620.0      # px，约 11 格
+const SPEED := 152.0            # px/s：玩家 235，直线跑得掉，但拐弯会被抄近路
+const CHASE_TIME := 4.2         # 听到后追多久
 const REPATH := 0.25            # 每多久重算一次路径（同时刷新目标位置）
-const CATCH_RADIUS := 38.0   # 比两个碰撞体的实际停距大：不然追到贴身也判不到「抓到」
+const CATCH_RADIUS := 31.0   # 比两个碰撞体的实际停距大：不然追到贴身也判不到「抓到」
 const LOSE_RADIUS := 900.0      # 超出这个距离且持续 LOSE_TIME 秒就放弃
 const LOSE_TIME := 1.5
 const LIGHT_ENERGY := 0.32

@@ -36,7 +36,20 @@ var _beat_t := 0.0
 var _toast: Label
 var _toast_t := 0.0
 var _flash: ColorRect
+var _alert_dir := 0.0
+var _alert_dir_t := 0.0
+var _achv_toast: Label
+var _achv_t := 0.0
+var _arrow: Control
+var _vignette: TextureRect
+var _danger := 0.0
+var _in_silence := false
+var _exit_dist := -1
+var _exit_arrow := ""
+var _exit_t := 0.0
+var _exit_pulse_t := 0.0
 var _flash_t := 0.0
+var _pump_color := Color(0.9, 0.15, 0.15)
 
 ## 所有面板共用的暗色样式（圆角 + 细边 + 内边距）
 func _panel_style() -> StyleBoxFlat:
@@ -175,6 +188,40 @@ func _ready() -> void:
 	_codex_panel.add_child(box)
 	add_child(_codex_panel)
 
+	# 危险暗角：敌人越近，屏幕边缘越红；跟着心跳一起脉动
+	_vignette = TextureRect.new()
+	_vignette.texture = _vignette_texture()
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vignette.modulate.a = 0.0
+	add_child(_vignette)
+
+	# 被听见的方向箭头：画在屏幕边缘，指向声音来源
+	_arrow = Control.new()
+	_arrow.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_arrow.draw.connect(_draw_arrow)
+	add_child(_arrow)
+
+	# 成就弹窗（屏幕中上）
+	_achv_toast = Label.new()
+	_achv_toast.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_achv_toast.position = Vector2(0, 168)
+	_achv_toast.custom_minimum_size = Vector2(760, 0)
+	_achv_toast.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	_achv_toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_achv_toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_achv_toast.add_theme_font_size_override("font_size", 19)
+	_achv_toast.add_theme_color_override("font_color", Color(1.0, 0.90, 0.60))
+	_achv_toast.add_theme_constant_override("outline_size", 7)
+	_achv_toast.add_theme_color_override("font_outline_color", Color(0.03, 0.02, 0.01, 0.95))
+	_achv_toast.visible = false
+	add_child(_achv_toast)
+	var ach := get_node_or_null("/root/Achv")
+	if ach != null and ach.has_signal("unlocked"):
+		ach.connect("unlocked", _on_achv)
+
 	# 受击红闪
 	_flash = ColorRect.new()
 	_flash.color = Color(0.9, 0.15, 0.15, 0.0)
@@ -205,6 +252,17 @@ func _process(delta: float) -> void:
 	_update_tutorial(delta)
 	_update_toast(delta)
 	_update_heartbeat(delta)
+	_update_vignette(delta)
+	_update_exit_hint(delta)
+	_update_exit_pulse(delta)
+	_update_silence(delta)
+	if _alert_dir_t > 0.0:
+		_alert_dir_t = maxf(0.0, _alert_dir_t - delta)
+		_arrow.queue_redraw()
+	if _achv_t > 0.0:
+		_achv_t -= delta
+		if _achv_t <= 0.0:
+			_achv_toast.visible = false
 	_update_settings_panel()
 	_update_codex_panel()
 	_update_pick_panel()
@@ -242,9 +300,9 @@ func _process(delta: float) -> void:
 		_flash_t = 0.5
 	if _flash_t > 0.0:
 		_flash_t = maxf(0.0, _flash_t - 0.016)
-		_flash.color = Color(0.9, 0.15, 0.15, _flash_t * 1.4)
+		_flash.color = Color(_pump_color.r, _pump_color.g, _pump_color.b, _flash_t * 1.4)
 	else:
-		_flash.color = Color(0.9, 0.15, 0.15, 0.0)
+		_flash.color = Color(_pump_color.r, _pump_color.g, _pump_color.b, 0.0)
 
 	_alert.visible = GameLog.alert_age() < 1.5 and not ended
 	_alert.text = "！有东西听见了" if _alert.visible else ""
@@ -275,8 +333,27 @@ func _process(delta: float) -> void:
 			next_txt = " · 再 %d 枚升级" % maxi(1, (tier + 1) * 3 - have)
 		frag_txt = "   碎片 剩 %d/%d%s" % [lvl.fragment_cells().size(),
 			lvl.fragment_total(), next_txt]
-	_hint.text = "第 %d/%d 关   %5.1f s   声呐 %d 次%s   [空格] 声呐   %s   [C] 图鉴   [Tab] 数据   [R] 重开%s" % [
-		lvl_no, lvl_total, GameLog.elapsed(), GameLog.sonar_count, frag_txt, strong_hint, tail
+	# 静默连击：多久没发声了（不发声就不会被听见，这是一种正反馈）
+	var quiet := GameLog.quiet_seconds()
+	var quiet_txt := ""
+	if quiet >= 8.0:
+		quiet_txt = "   静默 %.0fs" % quiet
+	var alert_txt := ""
+	if GameLog.alert_count > 0:
+		alert_txt = "   被听见 %d 次" % GameLog.alert_count
+	var silence_txt := ""
+	if _in_silence:
+		silence_txt = "   静音区 · 声音传不出去"
+	var charge_txt := ""
+	if player != null and player.has_method("charge_count"):
+		var n := int(player.call("charge_count"))
+		if n > 0:
+			charge_txt = "   共鸣 %d [Q]" % n
+	var exit_txt := ""
+	if _exit_dist >= 0:
+		exit_txt = "   出口 %d 格 %s" % [_exit_dist, _exit_arrow]
+	_hint.text = "第 %d/%d 关   %5.1f s   声呐 %d 次%s%s%s%s%s%s   [空格] 声呐   %s   [C] 图鉴   [Tab] 数据   [R] 重开%s" % [
+		lvl_no, lvl_total, GameLog.elapsed(), GameLog.sonar_count, frag_txt, quiet_txt, alert_txt, silence_txt, charge_txt, exit_txt, strong_hint, tail
 	]
 
 
@@ -497,6 +574,82 @@ func _update_heartbeat(delta: float) -> void:
 		Sfx.heart()
 
 
+## 危险暗角贴图：中间透明、越靠边越红（程序生成，零图片资源）
+func _vignette_texture() -> ImageTexture:
+	var w := 192
+	var h := 108
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	for y in h:
+		for x in w:
+			var nx := (float(x) / float(w) - 0.5) * 2.0
+			var ny := (float(y) / float(h) - 0.5) * 2.0
+			var d := sqrt(nx * nx + ny * ny)
+			var a := clampf((d - 0.55) / 0.55, 0.0, 1.0)
+			img.set_pixel(x, y, Color(0.85, 0.12, 0.12, pow(a, 1.3)))
+	return ImageTexture.create_from_image(img)
+
+
+## 敌人最近距离 → 暗角强度（0 远处，1 贴脸）
+func _update_vignette(delta: float) -> void:
+	if _vignette == null:
+		return
+	var lvl := get_parent()
+	var box := lvl.get_node_or_null("Enemies") if lvl != null else null
+	var want := 0.0
+	if box != null and _player != null and box.get_child_count() > 0:
+		var best := INF
+		for e in box.get_children():
+			best = minf(best, _player.global_position.distance_to(e.global_position))
+		if best < 700.0:
+			want = clampf(1.0 - best / 700.0, 0.0, 1.0)
+	# 峰值保持：敌人擦身而过后，红边不会立刻消失，而是慢慢退（更符合"被盯上"的感觉）
+	if want >= _danger:
+		_danger = lerpf(_danger, want, clampf(delta * 6.0, 0.0, 1.0))
+	else:
+		_danger = maxf(want, _danger - delta * 0.45)
+	# 跟心跳同相：距离越近，脉动越急
+	var t := Time.get_ticks_msec() / 1000.0
+	var speed := lerpf(1.2, 5.0, _danger)
+	_vignette.modulate.a = clampf(_danger * 1.7, 0.0, 0.9) * (0.65 + 0.35 * sin(t * speed))
+
+
+## 被听见：记住方向，屏幕边缘亮 1.2 秒
+func note_alert_dir(world_pos: Vector2) -> void:
+	if _player == null:
+		return
+	_alert_dir = (world_pos - _player.global_position).angle()
+	_alert_dir_t = 1.2
+	_arrow.queue_redraw()
+
+
+func _draw_arrow() -> void:
+	if _arrow == null or _alert_dir_t <= 0.0:
+		return
+	var vs: Vector2 = get_viewport().get_visible_rect().size
+	var c: Vector2 = vs * 0.5
+	var dir := Vector2(cos(_alert_dir), sin(_alert_dir))
+	var at: Vector2 = c + Vector2(dir.x * vs.x * 0.44, dir.y * vs.y * 0.44)
+	var a := clampf(_alert_dir_t / 1.2, 0.0, 1.0)
+	var tip: Vector2 = at + dir * 26.0
+	var side: Vector2 = dir.orthogonal() * 16.0
+	_arrow.draw_colored_polygon(PackedVector2Array([tip, at + side, at - side]),
+		Color(1.0, 0.35, 0.30, 0.85 * a))
+
+
+func _on_achv(_id: String, name: String, desc: String) -> void:
+	_achv_toast.text = "成就解锁 · %s\n%s" % [name, desc]
+	_achv_toast.visible = true
+	_achv_t = 4.0
+
+
+## 整屏一闪：捡碎片（绿）/ 通关（白）/ 被抓（红）
+func pump(color: Color, seconds: float = 0.45) -> void:
+	if _flash == null:
+		return
+	_pump_color = color
+	_flash_t = seconds
+
+
 ## 面板淡入（打开的一瞬间不要"啪"地出现）
 func _fade_panels() -> void:
 	for c in [_settings, _codex_panel, _pick]:
@@ -551,6 +704,93 @@ func _update_settings_panel() -> void:
 		+ "[1] 亮度    [2] 音量    [3] 声呐配色\n\n%s\n\n"
 		+ "[4] 上一关    [5] 下一关    [6] 重置进度    [7] 回主菜单\n\n"
 		+ "Esc 继续游戏") % [Settings.describe(), _save_summary()]
+
+
+## 玩家在静音区里：状态栏提示 + 环境音压低（"闷"的感觉）
+func _update_silence(delta: float) -> void:
+	var lvl := get_parent()
+	if lvl == null or _player == null or not lvl.has_method("is_silent_at"):
+		return
+	var now := bool(lvl.call("is_silent_at", _player.global_position))
+	if now == _in_silence:
+		return
+	_in_silence = now
+	Sfx.call("set_muffled", now)
+
+
+## 出口距离与方向：给"快到了"的牵引感（每 0.3 秒重算一次，BFS 很便宜）
+func _update_exit_hint(delta: float) -> void:
+	_exit_t -= delta
+	if _exit_t > 0.0 or _player == null:
+		return
+	_exit_t = 0.3
+	var lvl := get_parent()
+	if lvl == null or not lvl.has_method("goal_cell"):
+		return
+	var goal: Vector2i = lvl.goal_cell()
+	var rows: Array = lvl.call("raw_rows") if lvl.has_method("raw_rows") else lvl.map_rows()
+	var start := Vector2i((_player.global_position / 64.0).floor())
+	var dist := _bfs_dist(rows, goal, start)
+	_exit_dist = dist
+	var dc := goal - start
+	_exit_arrow = _arrow_for(dc)
+
+
+## 离出口 8 格内开始有低沉的"呼吸声"，越近越急越响——不用看 HUD 也知道方向
+func _update_exit_pulse(delta: float) -> void:
+	if _exit_dist < 0 or _exit_dist > 8:
+		_exit_pulse_t = 0.0
+		return
+	if _paused_by_panel:
+		return
+	var k := 1.0 - float(_exit_dist) / 8.0            # 0 远 → 1 贴脸
+	var interval := lerpf(1.45, 0.42, k)
+	_exit_pulse_t += delta
+	if _exit_pulse_t >= interval:
+		_exit_pulse_t = 0.0
+		Sfx.exit_pulse(lerpf(-14.0, -4.0, k))
+
+
+func _bfs_dist(rows: Array, from: Vector2i, to: Vector2i) -> int:
+	if from == to:
+		return 0
+	var h := rows.size()
+	var w := String(rows[0]).length()
+	var seen := {}
+	var q: Array = [from]
+	seen[from] = 0
+	while not q.is_empty():
+		var c: Vector2i = q.pop_front()
+		var d: int = int(seen[c])
+		for step in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + step
+			if n.x < 0 or n.y < 0 or n.y >= h or n.x >= w:
+				continue
+			if String(rows[n.y])[n.x] == "#" or seen.has(n):
+				continue
+			if n == to:
+				return d + 1
+			seen[n] = d + 1
+			q.append(n)
+	return -1
+
+
+func _arrow_for(d: Vector2i) -> String:
+	var ax := 0
+	var ay := 0
+	if absi(d.x) > 2:
+		ax = signi(d.x)
+	if absi(d.y) > 2:
+		ay = signi(d.y)
+	if ax > 0:
+		return "↘" if ay > 0 else ("↗" if ay < 0 else "→")
+	if ax < 0:
+		return "↙" if ay > 0 else ("↖" if ay < 0 else "←")
+	if ay > 0:
+		return "↓"
+	if ay < 0:
+		return "↑"
+	return "●"
 
 
 ## 每帧把玩家所在格喂给小地图（重复的格子内部会忽略）
@@ -614,13 +854,23 @@ func _show_result(reason: String) -> void:
 		extra = "\n" + extra
 
 	var par := GameLog.par_seconds(int((r.get("config", {}) as Dictionary).get("route_len", 120)))
-	_result_text.text = "%s        评价 %s\n\n用时 %.1f s（目标 %.0f s）  声呐 %d 次  被听见 %d 次\n走过 %d 格（进入 %d 次）\n重复率 %.0f %%\n%s\n\n[R] 再试一次    [Esc] 菜单（暂停）" % [
+	var route_len := int((r.get("config", {}) as Dictionary).get("route_len", 0))
+	var step_txt := ""
+	if route_len > 0:
+		var over := cells - route_len
+		if over <= 0:
+			step_txt = "\n走过 %d 格   = 最短路线（%.0f 次进入）" % [cells, float(entries)]
+		else:
+			step_txt = "\n走过 %d 格   最短 %d 格   多走 %d 格" % [cells, route_len, over]
+	_result_text.text = "%s        评价 %s\n\n用时 %.1f s（目标 %.0f s）  声呐 %d 次  被听见 %d 次%s\n重复率 %.0f %%\n%s\n\n[R] 再试一次    [Esc] 菜单（暂停）" % [
 		title, grade, mine, par, int(r.get("sonar_presses", 0)), int(r.get("alerts", 0)),
-		cells, entries, revisit * 100.0, extra,
+		step_txt, revisit * 100.0, extra,
 	]
 	_result_text.add_theme_color_override("font_color",
 		Color(0.85, 0.96, 1.0) if reason == "win" else Color(1.0, 0.62, 0.55))
 	_result.visible = true
+	if reason == "win":
+		pump(Color(0.85, 0.95, 1.0), 0.55)
 	_result.modulate.a = 0.0
 	var rt := create_tween()
 	rt.set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)

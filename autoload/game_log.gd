@@ -11,6 +11,7 @@ const MAX_RUNS := 200
 const CELL := 64.0
 
 var sonar_count := 0
+var _last_sonar_at := -1.0
 var key_count := 0
 var plate_count := 0
 var fragment_count := 0
@@ -64,6 +65,7 @@ func _prune_junk() -> void:
 
 func start_session() -> void:
 	sonar_count = 0
+	_last_sonar_at = -1.0
 	key_count = 0
 	plate_count = 0
 	fragment_count = 0
@@ -78,6 +80,13 @@ func start_session() -> void:
 	_ended = false
 	_t0 = Time.get_ticks_msec() / 1000.0
 
+## 上次发声过去了多久（没发过声返回 -1）
+func quiet_seconds() -> float:
+	if _last_sonar_at < 0.0:
+		return -1.0
+	return maxf(0.0, elapsed() - _last_sonar_at)
+
+
 func elapsed() -> float:
 	if _ended:
 		return _frozen
@@ -85,6 +94,7 @@ func elapsed() -> float:
 
 func note_sonar() -> void:
 	sonar_count += 1
+	_last_sonar_at = elapsed()
 
 ## 捡到钥匙（成就与遥测用）
 func note_key() -> void:

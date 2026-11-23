@@ -24,6 +24,8 @@ var _gen := 0
 var _cd := 0.0
 var _cd_strong := 0.0
 var _alive := true
+var _grace_t := 0.0    # 复活后的短暂无敌
+var _charges := 0      # 共鸣核数量（Q 释放）
 var _facing := Vector2.DOWN
 var _emit_kick := 0.0   # 发声时镜头轻轻一顿
 var _icon: Node2D
@@ -56,6 +58,7 @@ func _upgrade_light() -> void:
 ## 重开/换关：复位状态、重置这一局的遥测
 func reset_state(pos: Vector2) -> void:
 	_gen += 1
+	_grace_t = 2.0
 	global_position = pos
 	velocity = Vector2.ZERO
 	_alive = true
@@ -94,6 +97,7 @@ func _physics_process(delta: float) -> void:
 		if _step_t <= 0.0:
 			_step_t = 0.42
 			Sfx.step()
+			_step_ripple()
 		_try_push(dir)
 	if dir != Vector2.ZERO:
 		_facing = dir
@@ -125,6 +129,14 @@ func _physics_process(delta: float) -> void:
 			lv.emit_wave(global_position, true)
 		GameLog.note_sonar()
 
+	# Q：共鸣核冲击
+	if Input.is_action_just_pressed("resonance") and _charges > 0:
+		var lv_r := get_parent()
+		if lv_r != null and lv_r.has_method("resonance_blast"):
+			_charges -= 1
+			lv_r.call("resonance_blast", global_position)
+			_shake_t = 0.35
+
 	_shake(delta)
 	if _icon != null:
 		_icon.global_position = global_position
@@ -133,6 +145,8 @@ func _physics_process(delta: float) -> void:
 		var t := Time.get_ticks_msec() / 1000.0
 		var speed := 2.2 if velocity.length() > 1.0 else 1.4
 		_icon.scale = Vector2.ONE * (1.0 + 0.045 * sin(t * speed))
+	if _grace_t > 0.0:
+		_grace_t = maxf(0.0, _grace_t - delta)
 	if _emit_kick > 0.0:
 		_emit_kick = maxf(0.0, _emit_kick - delta * 2.2)
 	GameLog.note_position(global_position)
@@ -187,6 +201,15 @@ func _shake(delta: float) -> void:
 		cam.offset += Vector2(randf_range(-6, 6), randf_range(-6, 6))
 
 
+## 脚步涟漪：脚下扩散一圈淡蓝，配合脚步声给"在移动"的触感
+func _step_ripple() -> void:
+	if _icon == null or _icon.get_parent() == null:
+		return
+	var ring := preload("res://scripts/fx.gd").Ripple.new()
+	ring.position = global_position
+	_icon.get_parent().add_child(ring)
+
+
 ## 图标画在屏幕层（不受全黑层影响），否则玩家自己都看不见
 func _build_icon() -> void:
 	var layer := CanvasLayer.new()
@@ -226,7 +249,7 @@ func win() -> void:
 ## 被敌人碰到：和通关共用同一套结算，只是 reason 不同。
 ## 顺序不能反：先停再记，否则最后一帧还会移动。
 func caught() -> void:
-	if not _alive:
+	if not _alive or _grace_t > 0.0:
 		return
 	_alive = false
 	velocity = Vector2.ZERO
@@ -234,3 +257,12 @@ func caught() -> void:
 	Sfx.hit()
 	_shake_t = 0.45
 	GameLog.end_session("caught")
+
+
+## 捡到共鸣核
+func add_charge(n: int) -> void:
+	_charges += n
+
+
+func charge_count() -> int:
+	return _charges

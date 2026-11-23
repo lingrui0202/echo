@@ -28,6 +28,7 @@ func _ready() -> void:
 			lv.call("door_cells").size(), lv.call("key_cells").size(),
 			lv.call("plate_cells").size(), lv.call("silence_cells").size(),
 			lv.call("crate_cells").size(), lv.call("fragment_cells").size()])
+		print("        共鸣核 ", (lv.get("_cores") as Dictionary).size())
 		lv.queue_free()
 		await get_tree().process_frame
 

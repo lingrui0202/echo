@@ -28,19 +28,19 @@ const CELL := 64
 # 放在路线旁边的开放格上（优先不在路线上，避免堵死唯一通道）。
 # 这样玩家沿正常路线走一定会经过它们附近；地图改了也不用重对坐标。
 # 每关敌人数（索引 = 关卡序，0 起）：第 1 关没有敌人，先把“找路”练熟
-const ENEMY_BY_LEVEL := [0, 2, 3, 3, 4, 4, 5, 5, 6, 6]
+const ENEMY_BY_LEVEL := [0, 1, 2, 2, 3, 3, 4, 4, 5, 5]
 ## 每关敌人类型：0 普通 / 1 瞎子（只被强声呐惊动）/ 2 敏锐（听觉远、追得久）
 const ENEMY_KINDS := [
 	[],
-	[0, 0],
-	[2, 0, 0],
-	[0, 1, 2],
-	[2, 1, 0, 0],
-	[0, 2, 1, 0],
-	[0, 0, 2, 1, 2],
-	[1, 2, 2, 0, 0],
-	[0, 1, 2, 2, 1, 0],
-	[2, 1, 1, 0, 2, 0],
+	[0],
+	[2, 0],
+	[0, 1],
+	[2, 1, 0],
+	[0, 2, 1],
+	[0, 0, 2, 1],
+	[1, 2, 2, 0],
+	[0, 1, 2, 2, 1],
+	[2, 1, 1, 0, 2],
 ]
 const ENEMY_SEP := 10
 const ENEMY_ROUTE_FRACS := [0.16, 0.30, 0.44, 0.58, 0.72, 0.86]
@@ -73,6 +73,7 @@ var _active_plate := Vector2i(-99, -99)
 var _keys_revealed := false     # 碰过门之后，小地图才标钥匙
 var _goal_revealed := false     # 见过一次出口之后，小地图上标出来
 var _frags := {}          # 格子 -> 节点
+var _cores := {}          # 共鸣核：格子 -> 节点
 var _overlay: CanvasLayer     # 机关图标画在这层（不受全黑层影响）
 var _reveals := []            # [{node, cell, seen}]
 
@@ -113,6 +114,11 @@ func _ready() -> void:
 		print("[level] 编辑器模式：已按 MAP 生成 %d 面墙" % $Walls.get_child_count())
 
 ## 给工具/自检用的只读接口，避免测试再抄一份坐标。
+## 原始地图（门当作可通行）：用来算「离出口还有多远」
+func raw_rows() -> Array:
+	return Levels.MAPS[level_index]
+
+
 func map_rows() -> Array:
 	return map
 
@@ -218,6 +224,7 @@ func _build() -> void:
 	_reveals.clear()
 	_build_objects()
 	_spawn_fragments()
+	_spawn_cores()
 
 	# 声呐波场：跟地图同一套坐标，墙就是反射面。编辑器里不需要，省得它一直刷新。
 	_map_w = width
@@ -282,6 +289,7 @@ func _build_objects() -> void:
 				"X":
 					_silence[cell] = true
 					_add_reveal("silence", cell, float(CELL) * 1.0)
+	_generate_silence()
 	_link_plates()
 
 	# 门一开始是关的（改了 map，寻路/射线就都过不去）
@@ -401,6 +409,19 @@ func _process(_delta: float) -> void:
 				break
 
 	_update_reveals(cell)
+	_pulse_near_fragments(cell)
+	if _cores.has(cell):
+		_cores.erase(cell)
+		var cnode: Node = _cores.get(cell, null)
+		if cnode != null:
+			cnode.queue_free()
+		var pl := get_node_or_null("Player")
+		if pl != null and pl.has_method("add_charge"):
+			pl.call("add_charge", 1)
+		Sfx.play("frag")
+		var hud_c := get_node_or_null("HUD")
+		if hud_c != null and hud_c.has_method("pump"):
+			hud_c.call("pump", Color(0.55, 0.75, 1.0), 0.35)
 	_codex_proximity(cell)      # 先记图鉴：踩到钥匙会被立刻收走
 	if _keys.has(cell):
 		_collect_key(cell)
@@ -485,6 +506,56 @@ func _spawn_fragments() -> void:
 		_add_fragment(root, c, key)
 		placed += 1
 
+## 共鸣核：每关 1 枚，捡到后按 Q 震杀附近敌人（反制手段）
+func _spawn_cores() -> void:
+	_cores.clear()
+	var root := get_node_or_null("Cores")
+	if root == null:
+		root = Node2D.new()
+		root.name = "Cores"
+		add_child(root)
+	for c in root.get_children():
+		root.remove_child(c)
+		c.queue_free()
+	if level_index == 0:
+		return                      # 第 1 关不放：先学会走，再学打
+	var raw: Array = Levels.MAPS[level_index]
+	var route := Maze.path(raw, START, _goal_cell)
+	var on_route := {}
+	for c in route:
+		on_route[c] = true
+	var reach: Dictionary = Maze.distances(raw, START)
+	var cands: Array = []
+	for y in raw.size():
+		var row: String = raw[y]
+		for x in row.length():
+			if row[x] != ".":
+				continue
+			var c := Vector2i(x, y)
+			if on_route.has(c) or c == START or c == _goal_cell:
+				continue
+			if not reach.has(c) or _frags.has(c):
+				continue
+			# 离起点远一点：拿到之后才有敌人可打
+			if int(reach[c]) < 30:
+				continue
+			cands.append(c)
+	if cands.is_empty():
+		return
+	# 取最远的若干个，逼玩家往里走；数量约等于敌人的一半到三分之二
+	cands.sort_custom(func(a, b): return int(reach[a]) > int(reach[b]))
+	var want := maxi(1, int(round(float(_enemy_target()) * 0.55)))
+	var placed := 0
+	for c in cands:
+		if placed >= want:
+			break
+		if _cores.has(c):
+			continue
+		var node := _add_reveal("core", c, float(CELL) * 0.8, true)
+		_cores[c] = node
+		placed += 1
+
+
 func _add_fragment(root: Node2D, cell: Vector2i, key: String) -> void:
 	var node := _add_reveal("fragment", cell, float(CELL) * 0.60)
 	node.set_meta("key", key)
@@ -510,6 +581,9 @@ func _collect_fragment(cell: Vector2i) -> void:
 	Progress.take_fragment(level_index, key)
 	GameLog.note_fragment()
 	Sfx.play("frag")
+	var hud := get_node_or_null("HUD")
+	if hud != null and hud.has_method("pump"):
+		hud.call("pump", Color(0.30, 1.0, 0.72), 0.40)   # 捡碎片：绿闪一下
 
 
 ## 第一次靠近某样东西就把它记进图鉴（HUD 会弹一条提示）
@@ -549,6 +623,23 @@ func _near_any(cell: Vector2i, cells: Array, radius: int) -> bool:
 		if cell.distance_to(Vector2i(c)) <= radius:
 			return true
 	return false
+
+
+## 碎片在 3.5 格内轻轻脉动：不用踩到也能看出"那边有东西"，诱导玩家多走两步
+func _pulse_near_fragments(player_cell: Vector2i) -> void:
+	if _frags.is_empty():
+		return
+	var t := Time.get_ticks_msec() / 1000.0
+	for c in _frags.keys():
+		var node: Node2D = _frags[c]
+		if not is_instance_valid(node):
+			continue
+		var d: float = Vector2(c).distance_to(Vector2(player_cell))
+		if d <= 3.5:
+			node.visible = true
+			var k := clampf(1.0 - d / 3.5, 0.0, 1.0)
+			node.modulate.a = 0.55 + 0.45 * k * (0.6 + 0.4 * sin(t * 5.0))
+			node.scale = Vector2.ONE * (1.0 + 0.08 * k * sin(t * 5.0))
 
 
 ## 声呐波扫过，或玩家走到两步内，就把图标显出来（之后一直留着 = 记住了）
@@ -822,6 +913,103 @@ func crate_cells() -> Array:
 func has_crate(cell: Vector2i) -> bool:
 	return _crates.has(cell)
 
+## 静音区是"环境"而不是"机关"：每关按地板面积的 9% 散布若干片，
+## 走廊里会突然安静下来 —— 声音传不出去，敌人也听不见你。
+## 地图里已经标了 X 的格子作为种子保留，其余程序生成（按关卡固定种子，重开不变）。
+const SILENCE_RATIO := 0.09
+const SILENCE_BLOB := 7
+
+func _generate_silence() -> void:
+	if level_index == 0:
+		return                       # 第 1 关先不干扰
+	var raw: Array = Levels.MAPS[level_index]
+	var floors: Array = []
+	for y in raw.size():
+		var row: String = raw[y]
+		for x in row.length():
+			if row[x] != ".":
+				continue
+			var c := Vector2i(x, y)
+			if c == START or c == _goal_cell:
+				continue
+			if (c as Vector2i).distance_to(Vector2(START)) < 9.0:
+				continue
+			if _doors.has(c) or _keys.has(c) or _plates.has(c):
+				continue
+			floors.append(c)
+	if floors.is_empty():
+		return
+
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7919 + level_index * 131
+	var target := int(float(floors.size()) * SILENCE_RATIO)
+	# 已有 X 格子算种子
+	var seeds: Array = []
+	for c in _silence.keys():
+		seeds.append(c)
+	# 再随机撒片：片与片之间至少隔 6 格，避免糊成一大块
+	var tries := 0
+	while seeds.size() < 10 and tries < 400:
+		tries += 1
+		var c: Vector2i = floors[rng.randi_range(0, floors.size() - 1)]
+		var ok := true
+		for o in seeds:
+			if (o as Vector2i).distance_to(Vector2(c)) < 6.0:
+				ok = false
+				break
+		if ok:
+			seeds.append(c)
+
+	# 每片以种子为中心长成一个小块
+	for seed in seeds:
+		if _silence.size() >= target:
+			break
+		var blob: Array = [seed]
+		var frontier: Array = [seed]
+		while blob.size() < SILENCE_BLOB and not frontier.is_empty():
+			var cur: Vector2i = frontier.pop_front()
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				var n: Vector2i = cur + d
+				if blob.size() >= SILENCE_BLOB or _silence.size() >= target:
+					break
+				if not floors.has(n) or _silence.has(n) or blob.has(n):
+					continue
+				if _frags.has(n):
+					continue
+				blob.append(n)
+				frontier.append(n)
+		for c in blob:
+			if _silence.has(c):
+				continue
+			_silence[c] = true
+			_add_reveal("silence", c, float(CELL))
+
+
+## 静音区扩一圈：原来只有 2×2 的几个格子，玩起来几乎感觉不到。
+## 只吃普通地面（.），不碰起点/出口/门/钥匙/压力板，保证不会把通路变成"必须静音"。
+func _dilate_silence() -> void:
+	if _silence.is_empty():
+		return
+	var add: Array = []
+	for c in _silence.keys():
+		for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+			var n: Vector2i = c + d
+			if n.y < 0 or n.y >= map.size():
+				continue
+			if n.x < 0 or n.x >= String(map[n.y]).length():
+				continue
+			if String(map[n.y])[n.x] != ".":
+				continue
+			if n == START or n == _goal_cell or _doors.has(n) or _keys.has(n) or _plates.has(n):
+				continue
+			if _silence.has(n) or add.has(n):
+				continue
+			add.append(n)
+	for n in add:
+		_silence[n] = true
+		_add_reveal("silence", n, float(CELL))
+
+
 ## 推一格：目标格必须是空地、不是出口、没有别的箱子。
 func push_crate(cell: Vector2i, dir: Vector2i) -> bool:
 	if not _crates.has(cell):
@@ -852,6 +1040,26 @@ func _enemy_target() -> int:
 
 ## 声呐广播：听觉穿墙，不做视线判定。被惊动的数量记进遥测（HUD 会闪一下提示）。
 ## 强声呐的收益：近处敌人被震住、范围内敌人显形一会儿
+## 共鸣核的冲击：5.5 格内直接击杀，9 格内震住
+func resonance_blast(origin: Vector2) -> int:
+	var box := get_node_or_null("Enemies")
+	if box == null:
+		return 0
+	var killed := 0
+	for e in box.get_children():
+		var d: float = origin.distance_to(e.global_position)
+		if d <= 350.0:
+			e.queue_free()
+			killed += 1
+		elif d <= 580.0 and e.has_method("stun"):
+			e.call("stun", 2.0)
+	Sfx.play("strong")
+	var hud := get_node_or_null("HUD")
+	if hud != null and hud.has_method("pump"):
+		hud.call("pump", Color(0.75, 0.88, 1.0), 0.6)
+	return killed
+
+
 func _strong_impact(origin: Vector2) -> void:
 	var box := get_node_or_null("Enemies")
 	if box == null:
@@ -870,14 +1078,23 @@ func _alarm(p: Vector2, strong: bool = false) -> void:
 	if enemies == null:
 		return
 	var heard := 0
+	var nearest := Vector2.ZERO
+	var nearest_d := INF
 	for e in enemies.get_children():
 		if not e.has_method("hear"):
 			continue
 		var got: bool = e.hear_any(p) if (strong and e.has_method("hear_any")) else e.hear(p)
 		if got:
 			heard += 1
+			var d: float = e.global_position.distance_to(p)
+			if d < nearest_d:
+				nearest_d = d
+				nearest = e.global_position
 	if heard > 0:
 		GameLog.note_alert(heard)
+		var hud := get_node_or_null("HUD")
+		if hud != null and hud.has_method("note_alert_dir"):
+			hud.call("note_alert_dir", nearest)   # 被听见时告诉玩家声音来自哪边
 
 
 ## 把这一局的地图/波参数写进遥测。改完参数后数据才解释得通：
@@ -960,8 +1177,8 @@ func _show_intro_card() -> void:
 	layer.add_child(title)
 
 	var sub := Label.new()
-	sub.text = "目标：找到绿色出口   ·   %d × %d   ·   %s" % [String(Levels.MAPS[level_index][0]).length(),
-		Levels.MAPS[level_index].size(), _intro_hint()]
+	sub.text = "目标：找到绿色出口   ·   最短 %d 格   ·   %s" % [
+		_route_len, _intro_hint()]
 	sub.add_theme_font_size_override("font_size", 17)
 	sub.add_theme_color_override("font_color", Color(0.66, 0.78, 0.92))
 	sub.add_theme_color_override("font_outline_color", Color(0.01, 0.02, 0.04, 0.95))

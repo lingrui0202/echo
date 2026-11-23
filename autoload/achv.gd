@@ -1,4 +1,7 @@
 extends Node
+
+## HUD 收到就弹一条
+signal unlocked(id: String, name: String, desc: String)
 ## 成就：每局结束算一次，达成条件就记进存档。
 ## 条件都基于「这一局的记录 + 存档累计」，不放模糊判断。
 
@@ -57,8 +60,15 @@ func _on_run(rec: Dictionary) -> void:
 
 func _unlock(id: String) -> void:
 	var prog := get_node_or_null("/root/Progress")
+	var fresh := false
 	if prog != null:
-		prog.unlock_achv(id)
+		fresh = prog.unlock_achv(id)
+	if not fresh:
+		return
+	for a in LIST:
+		if String(a["id"]) == id:
+			unlocked.emit(id, String(a["name"]), String(a["desc"]))
+			break
 
 func status() -> Array:
 	var prog := get_node_or_null("/root/Progress")

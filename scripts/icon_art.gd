@@ -160,6 +160,20 @@ static func draw_sonar(c: CanvasItem, size: float, strong: bool = false) -> void
 		c.draw_arc(Vector2.ZERO, rr, PI * 0.25, PI * 1.25, 20, Color(col.r, col.g, col.b, a * 0.5), 1.4, true)
 
 
+## 共鸣核：蓝色实心球 + 内部裂纹 + 外圈脉冲环（一眼看出"这个能用"）
+static func draw_core(c: CanvasItem, size: float) -> void:
+	var r := size * 0.30
+	c.draw_circle(Vector2.ZERO, r * 1.9, Color(0.45, 0.72, 1.0, 0.12))
+	c.draw_circle(Vector2.ZERO, r * 1.35, Color(0.50, 0.78, 1.0, 0.22))
+	c.draw_circle(Vector2.ZERO, r, Color(0.42, 0.66, 0.98))
+	c.draw_circle(Vector2(-r * 0.3, -r * 0.3), r * 0.42, Color(0.85, 0.95, 1.0, 0.9))
+	for i in 3:
+		var a := TAU * float(i) / 3.0 + 0.5
+		c.draw_line(Vector2(cos(a), sin(a)) * r * 0.2, Vector2(cos(a), sin(a)) * r * 0.95,
+			Color(0.12, 0.25, 0.45, 0.8), 1.4)
+	c.draw_arc(Vector2.ZERO, r * 1.55, 0.0, TAU, 24, Color(0.65, 0.88, 1.0, 0.7), 1.4, true)
+
+
 ## 统一入口：按名字画一个图标（图鉴也用这个）
 static func draw_icon(c: CanvasItem, id: String, size: float, active: bool = false) -> void:
 	match id:
@@ -185,6 +199,8 @@ static func draw_icon(c: CanvasItem, id: String, size: float, active: bool = fal
 			draw_fragment(c, size * 0.9)
 		"goal":
 			draw_goal(c, size * 0.9)
+		"core":
+			draw_core(c, size * 0.9)
 		"sonar":
 			draw_sonar(c, size * 0.9, false)
 		"strong":

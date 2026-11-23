@@ -6,6 +6,15 @@ extends Node
 
 const RATE := 22050
 
+## 优先级：数字大的先响。低优先级的音如果碰上刚响起的高优先级音，就让位。
+## caught/hit（被抓）> heart（心跳）> frag/win（奖励）> ping/strong（发声）> exitpulse（出口）> step（脚步）
+const PRIORITY := {
+	"caught": 9, "hit": 9, "win": 8, "heart": 7, "frag": 6,
+	"strong": 5, "ping": 5, "exitpulse": 3, "step": 1, "ambient": 0,
+}
+const BLOCK_MS := 260        # 高优先级音响起后多久内，低优先级让位
+const SAME_GAP_MS := 70      # 同一个音的最小重触发间隔
+
 var _players := {}
 
 func _ready() -> void:
@@ -18,6 +27,7 @@ func _ready() -> void:
 	_add("frag", _tone(1046.0, 0.30, 0.35, 1568.0))
 	_add("step", _tone(180.0, 0.07, 0.18, 120.0))
 	_add("hit", _tone(90.0, 0.35, 0.55, 55.0))
+	_add("exitpulse", _tone(150.0, 0.42, 0.42, 104.0))
 	_add("ambient", _loop_tone(46.0, 3.0, 0.10))
 
 func _tone(freq: float, dur: float, amp: float, end_freq: float = -1.0) -> AudioStreamWAV:
@@ -54,10 +64,60 @@ func _add(name: String, stream: AudioStreamWAV) -> void:
 	add_child(p)
 	_players[name] = p
 
+var _last_ms := {}
+
+
 func play(name: String) -> void:
 	var p: AudioStreamPlayer = _players.get(name)
-	if p != null:
-		p.play()
+	if p == null:
+		return
+	var now := Time.get_ticks_msec()
+	var pri := int(PRIORITY.get(name, 3))
+
+	# 同一个音不要叠着炸（脚步之类高频音）
+	var last_same := int(_last_ms.get(name, -9999))
+	if now - last_same < SAME_GAP_MS:
+		return
+	# 刚响过更高优先级的音，就安静让位
+	for other in _last_ms.keys():
+		if other == name:
+			continue
+		if int(PRIORITY.get(other, 3)) > pri and now - int(_last_ms[other]) < BLOCK_MS:
+			return
+
+	_last_ms[name] = now
+	p.play()
+	# 发声/被抓时环境低频让路，避免糊成一片
+	if pri >= 7:
+		_duck_ambient()
+
+
+## 进/出静音区：环境音变闷（压低 + 慢速衰减）
+func set_muffled(on: bool) -> void:
+	var amb: AudioStreamPlayer = _players.get("ambient")
+	if amb == null:
+		return
+	var t := create_tween()
+	t.tween_property(amb, "volume_db", -24.0 if on else -10.0, 0.35)
+
+
+func _duck_ambient() -> void:
+	var amb: AudioStreamPlayer = _players.get("ambient")
+	if amb == null:
+		return
+	amb.volume_db = -26.0
+	var t := create_tween()
+	t.tween_interval(0.18)
+	t.tween_property(amb, "volume_db", -10.0, 0.5)
+
+## 出口的呼吸声：越近越响（volume_db 由调用方给）
+func exit_pulse(volume_db: float = -6.0) -> void:
+	var p: AudioStreamPlayer = _players.get("exitpulse")
+	if p == null:
+		return
+	p.volume_db = volume_db
+	p.play()
+
 
 func ping() -> void:
 	play("ping")
